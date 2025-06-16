@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import toastManager from '../utils/toastManager'; // Import toastManager
 import './Home.css';
 
 const Home = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [cartCount, setCartCount] = useState(0);
+  const [loadingProducts, setLoadingProducts] = useState(new Set()); // Individual loading
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -16,14 +18,15 @@ const Home = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  const stats = [
+  // Move static data outside component or memoize it
+  const stats = React.useMemo(() => [
     { number: '2.5M+', label: 'Aktiv İstifadəçi', icon: '👥' },
     { number: '150K+', label: 'Etibar edilən Satıcı', icon: '🏪' },
     { number: '50M+', label: 'Məhsul Çeşidi', icon: '📦' },
     { number: '99.9%', label: 'Müştəri Məmnuniyyəti', icon: '⭐' }
-  ];
+  ], []);
 
-  const categories = [
+  const categories = React.useMemo(() => [
     {
       id: 'technology',
       icon: '📱',
@@ -66,9 +69,9 @@ const Home = () => {
       description: 'İdman geyimləri, fitness avadanlıqları və outdoor fəaliyyət məhsulları',
       color: '#feca57'
     }
-  ];
+  ], []);
 
-  const featuredProducts = [
+  const featuredProducts = React.useMemo(() => [
     {
       id: 'iphone',
       image: '📱',
@@ -119,21 +122,40 @@ const Home = () => {
       badge: 'Premium',
       badgeColor: '#8b5cf6'
     }
-  ];
+  ], []);
 
   const handleCategoryClick = (categoryId) => {
     navigate(`/products?category=${categoryId}`);
   };
 
-  const handleAddToCart = (productId) => {
-    setCartCount(prev => prev + 1);
-    showToast('Məhsul səbətə əlavə edildi!', 'success');
-  };
-
-  const showToast = (message, type = 'success') => {
-    // Toast implementation will be added later
-    console.log(`Toast [${type}]: ${message}`);
-  };
+  const handleAddToCart = useCallback((productId) => {
+    console.log('🛒 Adding to cart:', productId);
+    
+    // Set loading for this specific product
+    setLoadingProducts(prev => new Set(prev).add(productId));
+    
+    setCartCount(prev => {
+      const newCount = prev + 1;
+      console.log('🛒 Cart count updated:', newCount);
+      return newCount;
+    });
+    
+    // Find product to get its name
+    const product = featuredProducts.find(p => p.id === productId);
+    const productName = product ? product.title : 'Məhsul';
+    
+    // Use toastManager with product name
+    toastManager.cartSuccess('Məhsul səbətə əlavə edildi', productName);
+    
+    // Remove loading after a short delay
+    setTimeout(() => {
+      setLoadingProducts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(productId);
+        return newSet;
+      });
+    }, 1000);
+  }, [featuredProducts]);
 
   if (isLoading) {
     return (
@@ -255,10 +277,20 @@ const Home = () => {
                   </div>
                   <div className="product-actions">
                     <button 
-                      className="add-to-cart"
+                      className={`add-to-cart ${loadingProducts.has(product.id) ? 'loading' : ''}`}
                       onClick={() => handleAddToCart(product.id)}
+                      disabled={loadingProducts.has(product.id)}
                     >
-                      🛒 Səbətə əlavə et
+                      {loadingProducts.has(product.id) ? (
+                        <>
+                          <span className="spinner-small"></span>
+                          Əlavə edilir...
+                        </>
+                      ) : (
+                        <>
+                          🛒 Səbətə əlavə et
+                        </>
+                      )}
                     </button>
                     <button className="wishlist-btn">♡</button>
                   </div>

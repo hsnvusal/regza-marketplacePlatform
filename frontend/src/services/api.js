@@ -1,6 +1,7 @@
 // src/services/api.js
 import axios from 'axios';
-import toast from 'react-hot-toast';
+// Remove direct toast import to prevent duplicates
+// import toast from 'react-hot-toast';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -34,7 +35,7 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor
+// Response interceptor - NO TOASTS HERE to prevent duplicates
 apiClient.interceptors.response.use(
   (response) => {
     if (import.meta.env.DEV) {
@@ -58,47 +59,42 @@ apiClient.interceptors.response.use(
           localStorage.removeItem('marketplace_token');
           localStorage.removeItem('marketplace_user');
           if (window.location.pathname !== '/login') {
-            toast.error('Sessiya bitdi. Yenidən daxil olun.');
+            // Only redirect, don't show toast here
+            console.log('🔄 Session expired, redirecting to login');
             window.location.href = '/login';
           }
           break;
           
         case 403:
-          toast.error('Bu əməliyyat üçün icazəniz yoxdur');
+          console.log('❌ Permission denied');
           break;
           
         case 404:
-          toast.error('Məlumat tapılmadı');
+          console.log('❌ Resource not found');
           break;
           
         case 422:
-          // Validation errors
-          if (data.errors && Array.isArray(data.errors)) {
-            data.errors.forEach(err => {
-              toast.error(err.msg || err.message || 'Validation error');
-            });
-          } else {
-            toast.error(data.message || 'Məlumat yoxlanması uğursuz oldu');
-          }
+          // Validation errors - log but don't toast
+          console.log('❌ Validation errors:', data.errors);
           break;
           
         case 429:
-          toast.error('Çox sayda request. Bir az gözləyin.');
+          console.log('❌ Too many requests');
           break;
           
         case 500:
-          toast.error('Server xətası. Daha sonra yenidən cəhd edin.');
+          console.log('❌ Server error');
           break;
           
         default:
           if (status >= 400) {
-            toast.error(data?.message || 'Bilinməyən xəta baş verdi');
+            console.log('❌ API Error:', data?.message || 'Unknown error');
           }
       }
     } else if (error.code === 'NETWORK_ERROR' || error.message === 'Network Error') {
-      toast.error('İnternet bağlantısını yoxlayın');
+      console.log('❌ Network error');
     } else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-      toast.error('Request timeout. Yenidən cəhd edin.');
+      console.log('❌ Request timeout');
     }
     
     return Promise.reject(error);

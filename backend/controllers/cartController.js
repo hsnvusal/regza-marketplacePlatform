@@ -82,6 +82,8 @@ const getCart = asyncHandler(async (req, res) => {
 // @desc    Səbətə məhsul əlavə et
 // @route   POST /api/cart/add
 // @access  Private
+// ✅ FIXED addToCart function - Replace your existing addToCart with this:
+
 const addToCart = asyncHandler(async (req, res) => {
   // Validation check
   const errors = validationResult(req);
@@ -97,6 +99,38 @@ const addToCart = asyncHandler(async (req, res) => {
   const { productId, quantity = 1, variants = [], notes = '' } = req.body;
 
   try {
+    // 🚨 DUPLICATE PROTECTION: Check for recent duplicate requests
+    const requestKey = `${req.user.id}_${productId}`;
+    const now = Date.now();
+    
+    // Simple in-memory protection (you can use Redis for production)
+    if (!global.cartRequestCache) {
+      global.cartRequestCache = new Map();
+    }
+    
+    const lastRequest = global.cartRequestCache.get(requestKey);
+    if (lastRequest && (now - lastRequest) < 2000) { // 2 seconds protection
+      console.log(`🚫 Duplicate request blocked: ${productId} - User: ${req.user.email}`);
+      return res.status(429).json({
+        success: false,
+        message: 'Çox tez istək. Zəhmət olmasa bir az gözləyin.',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Set request timestamp
+    global.cartRequestCache.set(requestKey, now);
+    
+    // Clean old entries (optional)
+    if (global.cartRequestCache.size > 1000) {
+      const cutoff = now - 10000; // 10 seconds
+      for (const [key, timestamp] of global.cartRequestCache.entries()) {
+        if (timestamp < cutoff) {
+          global.cartRequestCache.delete(key);
+        }
+      }
+    }
+
     // Product validation
     const product = await Product.findById(productId);
     if (!product) {
@@ -140,8 +174,50 @@ const addToCart = asyncHandler(async (req, res) => {
     // Get or create cart
     const cart = await Cart.findOrCreateCart(req.user.id);
 
-    // Add item to cart
-    await cart.addItem(productId, quantity, variants, notes);
+    // 🔍 CHECK FOR EXISTING ITEM (variants considered)
+    const variantKey = variants.length > 0 ? JSON.stringify(variants.sort()) : '';
+    const existingItemIndex = cart.items.findIndex(item => 
+      item.product.toString() === productId.toString() && 
+      JSON.stringify((item.selectedVariants || []).sort()) === variantKey
+    );
+
+    let addedItem;
+    let isNewItem = false;
+
+    if (existingItemIndex > -1) {
+      // 🔄 UPDATE EXISTING ITEM
+      const existingItem = cart.items[existingItemIndex];
+      const oldQuantity = existingItem.quantity;
+      const newQuantity = oldQuantity + quantity;
+      
+      // Check stock for new total quantity
+      if (product.inventory.trackQuantity && 
+          product.inventory.stock < newQuantity && 
+          !product.inventory.allowBackorder) {
+        return res.status(400).json({
+          success: false,
+          message: `Yetərli stok yoxdur. Mövcud: ${product.inventory.stock}, Səbətdə: ${oldQuantity}`,
+          availableStock: product.inventory.stock,
+          currentCartQuantity: oldQuantity,
+          requestedAdditional: quantity,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Update quantity
+      await cart.updateQuantity(existingItem._id, newQuantity);
+      addedItem = cart.items[existingItemIndex];
+      
+      console.log(`🔄 Səbətdə məhsul miqdarı artırıldı: ${product.name} (${oldQuantity} → ${newQuantity}) - İstifadəçi: ${req.user.email}`);
+      
+    } else {
+      // ➕ ADD NEW ITEM
+      await cart.addItem(productId, quantity, variants, notes);
+      addedItem = cart.items[cart.items.length - 1];
+      isNewItem = true;
+      
+      console.log(`✅ Yeni məhsul səbətə əlavə edildi: ${product.name} (${quantity}x) - İstifadəçi: ${req.user.email}`);
+    }
 
     // Populate for response
     await cart.populate({
@@ -153,13 +229,13 @@ const addToCart = asyncHandler(async (req, res) => {
       }
     });
 
-    const addedItem = cart.items[cart.items.length - 1];
-
-    console.log(`✅ Məhsul səbətə əlavə edildi: ${product.name} (${quantity}x) - İstifadəçi: ${req.user.email}`);
+    const responseMessage = isNewItem ? 
+      `"${product.name}" səbətə əlavə edildi` : 
+      `"${product.name}" miqdarı artırıldı`;
 
     res.status(200).json({
       success: true,
-      message: `"${product.name}" səbətə əlavə edildi`,
+      message: responseMessage,
       data: {
         cart: {
           id: cart._id,
@@ -175,7 +251,8 @@ const addToCart = asyncHandler(async (req, res) => {
           unitPrice: addedItem.unitPrice,
           totalPrice: addedItem.totalPrice,
           selectedVariants: addedItem.selectedVariants,
-          addedAt: addedItem.addedAt
+          addedAt: addedItem.addedAt,
+          isNewItem: isNewItem
         }
       },
       timestamp: new Date().toISOString()

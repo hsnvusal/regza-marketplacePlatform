@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -12,14 +12,6 @@ const ProductDetail = () => {
   const { addToCart, isLoading: cartLoading } = useCart();
   const { isLoggedIn } = useAuth();
 
-  // DEBUG INFO
-  console.log('🚀 ProductDetail component rendered');
-  console.log('🔍 URL param ID:', id);
-  console.log('🔍 ID type:', typeof id);
-  console.log('🔍 ID length:', id?.length);
-  console.log('🔍 Current URL:', window.location.href);
-  console.log('🔍 useParams result:', { id });
-
   // State management
   const [product, setProduct] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -31,58 +23,66 @@ const ProductDetail = () => {
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [activeTab, setActiveTab] = useState('description');
   const [showImageModal, setShowImageModal] = useState(false);
+  
+  // NEW: Separate loading states for optional data
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState(null);
+  const [relatedError, setRelatedError] = useState(null);
 
-  // Load product data
+  // Enhanced data loading with better error handling
   useEffect(() => {
     console.log('🔍 ProductDetail useEffect triggered with id:', id);
-    if (id && id.trim()) {
-      console.log('🚀 ID exists, calling loadProduct()');
-      // Load main product immediately
-      loadProduct();
-    } else {
+    
+    if (!id || !id.trim()) {
       console.error('❌ No valid product ID found in URL params');
       setError('Məhsul ID-si tapılmadı');
       setIsLoading(false);
+      return;
     }
-  }, [id, loadProduct]);
 
-  // Load additional data separately
-  useEffect(() => {
-    if (id && id.trim()) {
-      console.log('🔍 Loading additional data (reviews, related)');
-      const timer = setTimeout(() => {
-        loadReviews();
-        loadRelatedProducts();
-      }, 1000);
-
-      return () => clearTimeout(timer);
-    }
+    loadAllData();
   }, [id]);
 
-  // Load main product - make sure it's defined before useEffect
-  const loadProduct = useCallback(async () => {
+  // Main loading function with enhanced error handling
+  const loadAllData = async () => {
     try {
-      console.log('🚀 loadProduct function called');
-      console.log('🔍 About to call setIsLoading(true)');
+      console.log('🚀 Loading product with ID:', id);
       setIsLoading(true);
       setError(null);
 
-      console.log('🔍 Loading product with ID:', id);
-      console.log('🔍 Product ID type:', typeof id);
-      console.log('🔍 Product ID length:', id?.length);
-
-      if (!id || id.trim() === '') {
-        throw new Error('Məhsul ID-si boşdur');
-      }
-
-      console.log('🚀 About to call productService.getProductById');
+      // Load main product - this is critical
       const result = await productService.getProductById(id);
-
       console.log('🔍 ProductService result:', result);
 
-      if (result.success) {
+      if (result.success && result.data) {
         console.log('✅ Product loaded successfully:', result.data);
+        console.log('📝 Product structure:', {
+          id: result.data._id,
+          name: result.data.name,
+          pricing: result.data.pricing,
+          images: result.data.images,
+          description: result.data.description
+        });
+        
         setProduct(result.data);
+        
+        // Check if related products are included in the main response
+        if (result.data.relatedProducts && Array.isArray(result.data.relatedProducts)) {
+          console.log('✅ Related products found in main response:', result.data.relatedProducts.length);
+          setRelatedProducts(result.data.relatedProducts);
+          setRelatedLoading(false); // Set loading false since we have data
+        } else {
+          setRelatedLoading(false); // No related products, stop loading
+        }
+        
+        // Disable optional data loading since we handle it differently now
+        // loadOptionalData();
+        
+        // Set reviews as not available (for now)
+        setReviewsLoading(false);
+        setReviews([]);
+        
       } else {
         console.error('❌ Product loading failed:', result.error);
         setError(result.error || 'Məhsul tapılmadı');
@@ -91,51 +91,42 @@ const ProductDetail = () => {
       console.error('❌ Error loading product:', error);
       setError(error.message || 'Məhsul yüklənərkən xəta baş verdi');
     } finally {
-      console.log('🔍 Setting isLoading to false');
       setIsLoading(false);
     }
-  }, [id]);
+  };
 
-  // Load product reviews
+  // Load optional data (reviews & related products) with graceful fallbacks
+  const loadOptionalData = () => {
+    // Skip loading since we handle this differently now
+    console.log('📋 Optional data loading skipped - using main API response');
+    
+    // Reviews are disabled for now
+    setReviewsLoading(false);
+    setReviews([]);
+    
+    // Related products come from main API response
+    setRelatedLoading(false);
+  };
+
+  // Enhanced reviews loading - DISABLED FOR NOW
   const loadReviews = async () => {
-    try {
-      console.log('🔍 Loading reviews for product:', id);
-      const result = await productService.getProductReviews(id, { limit: 10 });
-      if (result.success) {
-        setReviews(result.data.reviews || []);
-        console.log('✅ Reviews loaded:', result.data.reviews?.length || 0);
-      } else {
-        console.log('⚠️ Reviews not available:', result.error);
-        setReviews([]); // Set empty array if not available
-      }
-    } catch (error) {
-      console.warn('⚠️ Could not load reviews:', error.message);
-      setReviews([]); // Set empty array on error
-    }
+    console.log('📝 Reviews loading is disabled');
+    setReviewsLoading(false);
+    setReviews([]);
+    setReviewsError('Rəylər xüsusiyyəti tezliklə əlavə ediləcək');
   };
 
-  // Load related products
+  // Enhanced related products loading - DISABLED, USING MAIN API RESPONSE
   const loadRelatedProducts = async () => {
-    try {
-      console.log('🔍 Loading related products for:', id);
-      const result = await productService.getRelatedProducts(id, 6);
-      if (result.success) {
-        setRelatedProducts(result.data.products || []);
-        console.log('✅ Related products loaded:', result.data.products?.length || 0);
-      } else {
-        console.log('⚠️ Related products not available:', result.error);
-        setRelatedProducts([]); // Set empty array if not available
-      }
-    } catch (error) {
-      console.warn('⚠️ Could not load related products:', error.message);
-      setRelatedProducts([]); // Set empty array on error
-    }
+    console.log('🔗 Related products loading is disabled - using main API response');
+    // This function is no longer needed since related products come from main API
+    setRelatedLoading(false);
   };
 
-  // Handle add to cart
+  // Handle add to cart - login required only for cart actions
   const handleAddToCart = async () => {
     if (!isLoggedIn) {
-      toast.error('Giriş edin və ya qeydiyyatdan keçin');
+      toast.error('Səbətə əlavə etmək üçün giriş edin');
       navigate('/login');
       return;
     }
@@ -151,10 +142,10 @@ const ProductDetail = () => {
     }
   };
 
-  // Handle buy now
+  // Handle buy now - login required only for purchase actions
   const handleBuyNow = async () => {
     if (!isLoggedIn) {
-      toast.error('Giriş edin və ya qeydiyyatdan keçin');
+      toast.error('Alış-veriş üçün giriş edin');
       navigate('/login');
       return;
     }
@@ -174,6 +165,12 @@ const ProductDetail = () => {
   // Handle related product click
   const handleRelatedProductClick = (productId) => {
     navigate(`/products/${productId}`);
+  };
+
+  // Retry function for failed optional data - DISABLED
+  const retryOptionalData = () => {
+    console.log('🔄 Retry disabled - reloading entire product data');
+    loadAllData(); // Reload the entire product instead
   };
 
   // Format price
@@ -203,24 +200,30 @@ const ProductDetail = () => {
     return stars;
   };
 
-  // Loading state - temporary reduced
+  // Debug logging for render
+  console.log('🎨 Rendering ProductDetail with product:', {
+    hasProduct: !!product,
+    productName: product?.name,
+    productPricing: product?.pricing,
+    isLoading,
+    error
+  });
+
+  // Loading state
   if (isLoading) {
     return (
       <div className="product-detail">
         <div className="container">
           <div className="product-loading">
             <div className="loading-spinner"></div>
-            <p>Məhsul yüklənir... (ID: {id})</p>
-            <p>Loading state: {isLoading ? 'true' : 'false'}</p>
-            <p>Product: {product ? 'loaded' : 'null'}</p>
-            <p>Error: {error || 'none'}</p>
+            <p>Məhsul yüklənir...</p>
           </div>
         </div>
       </div>
     );
   }
 
-  // Error state
+  // Error state - only for critical product data
   if (error || !product) {
     return (
       <div className="product-detail">
@@ -229,9 +232,14 @@ const ProductDetail = () => {
             <div className="error-icon">❌</div>
             <h2>Məhsul tapılmadı</h2>
             <p>{error || 'Bu məhsul mövcud deyil və ya silinib'}</p>
-            <button onClick={() => navigate('/products')} className="back-btn">
-              Məhsullara qayıt
-            </button>
+            <div className="error-actions">
+              <button onClick={() => navigate('/products')} className="back-btn">
+                Məhsullara qayıt
+              </button>
+              <button onClick={loadAllData} className="retry-btn">
+                🔄 Yenidən cəhd et
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -297,7 +305,11 @@ const ProductDetail = () => {
             </div>
 
             {/* Title */}
-            <h1 className="product-title">{product.name}</h1>
+            <h1 className="product-title">
+              {product.name && product.name !== 'Məhsul adı yoxdur' 
+                ? product.name 
+                : 'Məhsul'}
+            </h1>
 
             {/* Rating */}
             <div className="product-rating">
@@ -313,16 +325,21 @@ const ProductDetail = () => {
             {/* Price */}
             <div className="product-price">
               <div className="current-price">
-                {formatPrice(product.pricing?.sellingPrice || 0)}
+                {product.pricing?.sellingPrice && product.pricing.sellingPrice > 0
+                  ? formatPrice(product.pricing.sellingPrice) 
+                  : product.price && product.price > 0
+                    ? formatPrice(product.price)
+                    : 'Qiymət məlum deyil'
+                }
               </div>
-              {product.pricing?.originalPrice && 
-               product.pricing.originalPrice > product.pricing.sellingPrice && (
+              {((product.pricing?.originalPrice && product.pricing.originalPrice > (product.pricing.sellingPrice || 0)) ||
+                (product.originalPrice && product.originalPrice > (product.price || 0))) && (
                 <div className="price-info">
                   <span className="original-price">
-                    {formatPrice(product.pricing.originalPrice)}
+                    {formatPrice(product.pricing?.originalPrice || product.originalPrice || 0)}
                   </span>
                   <span className="savings">
-                    {formatPrice(product.pricing.originalPrice - product.pricing.sellingPrice)} qənaət
+                    {formatPrice((product.pricing?.originalPrice || product.originalPrice || 0) - (product.pricing?.sellingPrice || product.price || 0))} qənaət
                   </span>
                 </div>
               )}
@@ -330,9 +347,9 @@ const ProductDetail = () => {
 
             {/* Stock Status */}
             <div className="stock-status">
-              {product.stock > 0 ? (
+              {(product.stock > 0 || product.quantity > 0 || (!product.stock && !product.quantity)) ? (
                 <span className="in-stock">
-                  ✅ Stokda var ({product.stock} ədəd)
+                  ✅ Stokda var {product.stock || product.quantity ? `(${product.stock || product.quantity} ədəd)` : ''}
                 </span>
               ) : (
                 <span className="out-of-stock">
@@ -342,7 +359,7 @@ const ProductDetail = () => {
             </div>
 
             {/* Quantity Selector */}
-            {product.stock > 0 && (
+            {((product.stock && product.stock > 0) || (product.quantity && product.quantity > 0) || (!product.stock && !product.quantity)) && (
               <div className="quantity-section">
                 <label>Miqdar:</label>
                 <div className="quantity-controls">
@@ -356,7 +373,7 @@ const ProductDetail = () => {
                   <span className="quantity">{quantity}</span>
                   <button 
                     onClick={() => handleQuantityChange(1)}
-                    disabled={quantity >= product.stock}
+                    disabled={quantity >= (product.stock || product.quantity || 999)}
                     className="qty-btn"
                   >
                     +
@@ -370,7 +387,7 @@ const ProductDetail = () => {
               <button
                 className={`add-to-cart-btn ${cartLoading ? 'loading' : ''}`}
                 onClick={handleAddToCart}
-                disabled={cartLoading || product.stock <= 0}
+                disabled={cartLoading || (product.stock === 0 && product.quantity === 0)}
               >
                 {cartLoading ? (
                   <>
@@ -387,7 +404,7 @@ const ProductDetail = () => {
               <button
                 className="buy-now-btn"
                 onClick={handleBuyNow}
-                disabled={cartLoading || product.stock <= 0}
+                disabled={cartLoading || (product.stock === 0 && product.quantity === 0)}
               >
                 ⚡ İndi al
               </button>
@@ -442,7 +459,11 @@ const ProductDetail = () => {
             {activeTab === 'description' && (
               <div className="description-tab">
                 <h3>Məhsul haqqında</h3>
-                <p>{product.description || 'Bu məhsul haqqında ətraflı məlumat yoxdur.'}</p>
+                <p>
+                  {product.description && product.description !== 'undefined...' && product.description !== '...'
+                    ? product.description 
+                    : 'Bu məhsul haqqında ətraflı məlumat hal-hazırda mövcud deyil.'}
+                </p>
                 
                 {product.features && product.features.length > 0 && (
                   <div className="product-highlights">
@@ -501,30 +522,49 @@ const ProductDetail = () => {
               <div className="reviews-tab">
                 <h3>Müştəri rəyləri</h3>
                 
-                {reviews.length > 0 ? (
+                {/* Enhanced Reviews Section with working productService */}
+                {reviewsLoading ? (
+                  <div className="reviews-loading">
+                    <div className="loading-spinner"></div>
+                    <p>Rəylər yüklənir...</p>
+                  </div>
+                ) : reviewsError ? (
+                  <div className="reviews-error">
+                    <div className="error-message">
+                      <span className="error-icon">⚠️</span>
+                      <p>{reviewsError}</p>
+                      <small>Rəylər yükləmə xətası</small>
+                    </div>
+                    <button onClick={loadReviews} className="retry-btn-small">
+                      🔄 Yenidən cəhd et
+                    </button>
+                  </div>
+                ) : reviews.length > 0 ? (
                   <div className="reviews-list">
-                    {reviews.map((review) => (
-                      <div key={review._id} className="review-item">
+                    {reviews.map((review, index) => (
+                      <div key={review._id || index} className="review-item">
                         <div className="review-header">
                           <div className="reviewer-info">
                             <span className="reviewer-name">
-                              {review.user?.firstName || 'Anonim'} {review.user?.lastName?.[0] || ''}.
+                              {review.user?.firstName || review.userName || 'Anonim'} {review.user?.lastName?.[0] || ''}.
                             </span>
                             <div className="review-stars">
-                              {renderStars(review.rating)}
+                              {renderStars(review.rating || 0)}
                             </div>
                           </div>
                           <span className="review-date">
-                            {new Date(review.createdAt).toLocaleDateString('az-AZ')}
+                            {review.createdAt ? new Date(review.createdAt).toLocaleDateString('az-AZ') : 'Tarix yoxdur'}
                           </span>
                         </div>
-                        <p className="review-comment">{review.comment}</p>
+                        <p className="review-comment">{review.comment || review.text || 'Rəy mətni yoxdur'}</p>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="no-reviews">
-                    <p>Hələ heç bir rəy yoxdur. İlk rəy yazan siz olun!</p>
+                    <span className="no-reviews-icon">💭</span>
+                    <p>Hələ heç bir rəy yoxdur.</p>
+                    <small>İlk rəy yazan siz olun!</small>
                   </div>
                 )}
               </div>
@@ -532,10 +572,27 @@ const ProductDetail = () => {
           </div>
         </div>
 
-        {/* Related Products */}
-        {relatedProducts.length > 0 && (
-          <div className="related-products">
-            <h3>Oxşar məhsullar</h3>
+        {/* Enhanced Related Products Section with working productService */}
+        <div className="related-products">
+          <h3>Oxşar məhsullar</h3>
+          
+          {relatedLoading ? (
+            <div className="related-loading">
+              <div className="loading-spinner"></div>
+              <p>Oxşar məhsullar yüklənir...</p>
+            </div>
+          ) : relatedError ? (
+            <div className="related-error">
+              <div className="error-message">
+                <span className="error-icon">⚠️</span>
+                <p>{relatedError}</p>
+                <small>Oxşar məhsullar yükləmə xətası</small>
+              </div>
+              <button onClick={loadRelatedProducts} className="retry-btn-small">
+                🔄 Yenidən cəhd et
+              </button>
+            </div>
+          ) : relatedProducts.length > 0 ? (
             <div className="related-grid">
               {relatedProducts.map((relatedProduct) => (
                 <div 
@@ -551,18 +608,24 @@ const ProductDetail = () => {
                   <div className="related-info">
                     <h4>{relatedProduct.name}</h4>
                     <div className="related-price">
-                      {formatPrice(relatedProduct.pricing?.sellingPrice || 0)}
+                      {formatPrice(relatedProduct.pricing?.sellingPrice || relatedProduct.price || 0)}
                     </div>
                     <div className="related-rating">
-                      {renderStars(relatedProduct.ratings?.average || 0)}
-                      <span>({relatedProduct.ratings?.count || 0})</span>
+                      {renderStars(relatedProduct.ratings?.average || relatedProduct.rating || 0)}
+                      <span>({relatedProduct.ratings?.count || relatedProduct.reviewCount || 0})</span>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="no-related">
+              <span className="no-related-icon">🔗</span>
+              <p>Oxşar məhsul tapılmadı</p>
+              <small>Bu məhsulla bağlı oxşar məhsullar mövcud deyil</small>
+            </div>
+          )}
+        </div>
 
         {/* Image Modal */}
         {showImageModal && (

@@ -5,6 +5,8 @@ class AuthService {
   // Login user
   async login(email, password) {
     try {
+      console.log('🔍 AuthService: Login attempt for:', email);
+      
       const response = await apiClient.post('/auth/login', {
         email: email.toLowerCase().trim(),
         password
@@ -14,11 +16,13 @@ class AuthService {
       
       // Store auth data
       if (result.success && result.data.token) {
+        console.log('✅ AuthService: Login successful, storing data');
         this.setAuthData(result.data.token, result.data.user);
       }
       
       return result;
     } catch (error) {
+      console.error('❌ AuthService: Login error:', error);
       return handleApiError(error);
     }
   }
@@ -139,34 +143,53 @@ class AuthService {
     }
   }
   
-  // Set auth data in localStorage
+  // Set auth data in localStorage - MATCHED WITH API.JS KEYS
   setAuthData(token, user) {
     try {
-      if (token) localStorage.setItem('marketplace_token', token);
-      if (user) localStorage.setItem('marketplace_user', JSON.stringify(user));
+      console.log('💾 AuthService: Storing auth data');
+      console.log('💾 Token exists:', !!token);
+      console.log('💾 User exists:', !!user);
+      
+      if (token) {
+        localStorage.setItem('marketplace_token', token); // MATCHED WITH API.JS
+        console.log('✅ Token stored in marketplace_token');
+      }
+      if (user) {
+        localStorage.setItem('marketplace_user', JSON.stringify(user)); // MATCHED WITH API.JS
+        console.log('✅ User data stored in marketplace_user');
+      }
+      
+      console.log('✅ Auth data stored successfully');
     } catch (error) {
-      console.error('Error storing auth data:', error);
+      console.error('❌ Error storing auth data:', error);
     }
   }
   
   // Clear auth data
   clearAuthData() {
     try {
-      localStorage.removeItem('marketplace_token');
-      localStorage.removeItem('marketplace_user');
+      console.log('🗑️ AuthService: Clearing auth data');
+      
+      localStorage.removeItem('marketplace_token'); // MATCHED WITH API.JS
+      localStorage.removeItem('marketplace_user'); // MATCHED WITH API.JS
       localStorage.removeItem('marketplace_cart');
       localStorage.removeItem('marketplace_cart_id');
+      
+      console.log('✅ Auth data cleared');
     } catch (error) {
-      console.error('Error clearing auth data:', error);
+      console.error('❌ Error clearing auth data:', error);
     }
   }
   
   // Logout
   async logout() {
     try {
+      console.log('🚪 AuthService: Logout initiated');
+      
       // Optional: Call backend logout endpoint
       await apiClient.post('/auth/logout').catch(() => {
         // Ignore logout API errors, just clear local data
+        console.log('⚠️ Logout API call failed, continuing with local cleanup');
       });
     } finally {
       this.clearAuthData();
@@ -175,23 +198,50 @@ class AuthService {
   
   // Check if authenticated
   isAuthenticated() {
-    return !!(this.getToken() && this.getCurrentUser());
+    const token = this.getToken();
+    const user = this.getCurrentUser();
+    const isAuth = !!(token && user);
+    
+    console.log('🔍 AuthService: Authentication check');
+    console.log('🔍 Token exists:', !!token);
+    console.log('🔍 User exists:', !!user);
+    console.log('🔍 Is authenticated:', isAuth);
+    
+    return isAuth;
   }
   
   // Get current user from storage
   getCurrentUser() {
     try {
-      const userData = localStorage.getItem('marketplace_user');
-      return userData ? JSON.parse(userData) : null;
+      const userData = localStorage.getItem('marketplace_user'); // MATCHED WITH API.JS
+      const user = userData ? JSON.parse(userData) : null;
+      
+      if (user) {
+        console.log('👤 AuthService: Found user in storage:', user.email);
+      } else {
+        console.log('👤 AuthService: No user found in storage');
+      }
+      
+      return user;
     } catch (error) {
-      console.error('Error parsing stored user data:', error);
+      console.error('❌ Error parsing stored user data:', error);
+      // Clear corrupted data
+      localStorage.removeItem('marketplace_user');
       return null;
     }
   }
   
   // Get auth token
   getToken() {
-    return localStorage.getItem('marketplace_token');
+    const token = localStorage.getItem('marketplace_token'); // MATCHED WITH API.JS
+    
+    if (token) {
+      console.log('🎫 AuthService: Found token in storage');
+    } else {
+      console.log('🎫 AuthService: No token found in storage');
+    }
+    
+    return token;
   }
   
   // Get auth header object

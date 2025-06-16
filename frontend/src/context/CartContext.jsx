@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import cartService from '../services/cartService';
 import { useAuth } from './AuthContext';
-import toast from 'react-hot-toast';
+import toastManager from '../utils/toastManager';
 
 // Create Cart Context
 const CartContext = createContext();
@@ -43,7 +43,7 @@ export const CartProvider = ({ children }) => {
     }
   }, [isLoggedIn, isInitialized]);
 
-  // Initialize user cart (authenticated users)
+  // ✅ FIXED: Initialize user cart (authenticated users)
   const initializeUserCart = async () => {
     try {
       setIsLoading(true);
@@ -132,15 +132,71 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  // Sync guest cart with backend when user logs in
+  // ✅ FIXED: Sync guest cart with backend when user logs in
   const syncGuestCartWithBackend = async (guestItems) => {
     try {
       if (!guestItems.length) return;
 
+      // 🛡️ FIX 1: Check if sync was already done recently
+      const lastSyncTime = localStorage.getItem('last_cart_sync');
+      const now = Date.now();
+      
+      // Don't sync if last sync was less than 5 minutes ago
+      if (lastSyncTime && (now - parseInt(lastSyncTime)) < 5 * 60 * 1000) {
+        console.log('🔄 Cart sync skipped - recent sync detected');
+        await loadCartFromBackend();
+        return;
+      }
+
+      // 🛡️ FIX 2: Check if user just logged in (not page refresh)
+      const userJustLoggedIn = sessionStorage.getItem('user_just_logged_in');
+      if (!userJustLoggedIn) {
+        console.log('🔄 Cart sync skipped - no fresh login detected');
+        // Just load existing cart instead of syncing
+        await loadCartFromBackend();
+        clearGuestCartFromStorage(); // Clean up guest cart
+        return;
+      }
+
+      console.log('🔄 Starting cart sync for fresh login');
       setIsLoading(true);
       
-      // Sync each item with backend
-      for (const item of guestItems) {
+      // 🛡️ FIX 3: Get current backend cart first
+      let existingCart = [];
+      try {
+        const backendResult = await cartService.getCart();
+        if (backendResult.success && backendResult.data.cart) {
+          existingCart = backendResult.data.cart.items || [];
+        }
+      } catch (error) {
+        console.error('Error getting existing cart:', error);
+      }
+      
+      // 🛡️ FIX 4: Only sync items that don't exist in backend cart
+      const itemsToSync = guestItems.filter(guestItem => {
+        const guestProductId = guestItem.product.id || guestItem.product._id;
+        const existsInBackend = existingCart.some(backendItem => {
+          const backendProductId = backendItem.product._id || backendItem.product.id;
+          return backendProductId === guestProductId;
+        });
+        return !existsInBackend;
+      });
+
+      if (itemsToSync.length === 0) {
+        console.log('🔄 No new items to sync - all items already in backend cart');
+        clearGuestCartFromStorage();
+        await loadCartFromBackend();
+        
+        // 🛡️ FIX 5: Mark sync as completed and clear flags
+        localStorage.setItem('last_cart_sync', now.toString());
+        sessionStorage.removeItem('user_just_logged_in');
+        return;
+      }
+
+      console.log(`🔄 Syncing ${itemsToSync.length} new items to backend`);
+      
+      // Sync only new items with backend
+      for (const item of itemsToSync) {
         try {
           await cartService.addToCart(
             item.product.id || item.product._id,
@@ -152,12 +208,14 @@ export const CartProvider = ({ children }) => {
         }
       }
 
-      // Clear guest cart and reload from backend
+      // 🛡️ FIX 5: Mark sync as completed and clear flags
+      localStorage.setItem('last_cart_sync', now.toString());
+      sessionStorage.removeItem('user_just_logged_in');
       clearGuestCartFromStorage();
       await loadCartFromBackend();
       
-      if (guestItems.length > 0) {
-        toast.success('Səbət sinxronlaşdırıldı');
+      if (itemsToSync.length > 0) {
+        toastManager.actionSuccess(`${itemsToSync.length} məhsul sinxronlaşdırıldı`, '🔄');
       }
     } catch (error) {
       console.error('Cart sync error:', error);
@@ -174,11 +232,19 @@ export const CartProvider = ({ children }) => {
     setLastUpdated(new Date());
   };
 
-  // Add item to cart
+  // ✅ FIXED: Add item to cart with debug logging
   const addToCart = async (product, quantity = 1, selectedVariants = []) => {
     try {
       setIsLoading(true);
-
+      
+      // 🔍 DEBUG: Track who called addToCart
+      console.log("🔍 =================================");
+      console.log("🔍 addToCart CALLED!");
+      console.log("🔍 Product:", product?.name || product);
+      console.log("🔍 Stack trace:", new Error().stack);
+      console.log("🔍 Timestamp:", new Date().toISOString());
+      console.log("🔍 =================================");
+      
       if (isLoggedIn) {
         // Use backend for authenticated users
         const result = await cartService.addToCart(
@@ -189,10 +255,10 @@ export const CartProvider = ({ children }) => {
 
         if (result.success) {
           await loadCartFromBackend();
-          toast.success(`${product.name} səbətə əlavə edildi!`);
+          // NO TOAST HERE - it's handled by the calling component
           return { success: true };
         } else {
-          toast.error(result.error || 'Məhsul səbətə əlavə edilərkən xəta baş verdi');
+          toastManager.actionError(result.error || 'Məhsul səbətə əlavə edilərkən xəta baş verdi');
           return { success: false, error: result.error };
         }
       } else {
@@ -207,14 +273,14 @@ export const CartProvider = ({ children }) => {
         return addToGuestCart(product, quantity, selectedVariants);
       }
       
-      toast.error('Məhsul səbətə əlavə edilərkən xəta baş verdi');
+      toastManager.actionError('Məhsul səbətə əlavə edilərkən xəta baş verdi');
       return { success: false, error: error.message };
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Add to guest cart
+  // Add to guest cart - NO TOAST HERE to prevent duplicates
   const addToGuestCart = (product, quantity, selectedVariants) => {
     try {
       const productId = product.id || product._id;
@@ -262,11 +328,11 @@ export const CartProvider = ({ children }) => {
       saveGuestCartToStorage(updatedItems);
       setLastUpdated(new Date());
       
-      toast.success(`${product.name} səbətə əlavə edildi!`);
+      // NO TOAST HERE - it's handled by the calling component
       return { success: true };
     } catch (error) {
       console.error('Guest cart add error:', error);
-      toast.error('Məhsul səbətə əlavə edilərkən xəta baş verdi');
+      toastManager.actionError('Məhsul səbətə əlavə edilərkən xəta baş verdi');
       return { success: false, error: error.message };
     }
   };
@@ -288,7 +354,7 @@ export const CartProvider = ({ children }) => {
           await loadCartFromBackend();
           return { success: true };
         } else {
-          toast.error(result.error || 'Məhsul miqdarı yenilənərkən xəta baş verdi');
+          toastManager.actionError(result.error || 'Məhsul miqdarı yenilənərkən xəta baş verdi');
           return { success: false, error: result.error };
         }
       } else {
@@ -313,7 +379,7 @@ export const CartProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Update quantity error:', error);
-      toast.error('Məhsul miqdarı yenilənərkən xəta baş verdi');
+      toastManager.actionError('Məhsul miqdarı yenilənərkən xəta baş verdi');
       return { success: false, error: error.message };
     } finally {
       setIsLoading(false);
@@ -331,10 +397,10 @@ export const CartProvider = ({ children }) => {
 
         if (result.success) {
           await loadCartFromBackend();
-          toast.success('Məhsul səbətdən çıxarıldı');
+          toastManager.actionSuccess('Məhsul səbətdən çıxarıldı', '🗑️');
           return { success: true };
         } else {
-          toast.error(result.error || 'Məhsul səbətdən çıxarılarkən xəta baş verdi');
+          toastManager.actionError(result.error || 'Məhsul səbətdən çıxarılarkən xəta baş verdi');
           return { success: false, error: result.error };
         }
       } else {
@@ -345,12 +411,12 @@ export const CartProvider = ({ children }) => {
         saveGuestCartToStorage(updatedItems);
         setLastUpdated(new Date());
         
-        toast.success('Məhsul səbətdən çıxarıldı');
+        toastManager.actionSuccess('Məhsul səbətdən çıxarıldı', '🗑️');
         return { success: true };
       }
     } catch (error) {
       console.error('Remove from cart error:', error);
-      toast.error('Məhsul səbətdən çıxarılarkən xəta baş verdi');
+      toastManager.actionError('Məhsul səbətdən çıxarılarkən xəta baş verdi');
       return { success: false, error: error.message };
     } finally {
       setIsLoading(false);
@@ -369,22 +435,22 @@ export const CartProvider = ({ children }) => {
         if (result.success) {
           resetCart();
           clearGuestCartFromStorage();
-          toast.success('Səbət təmizləndi');
+          toastManager.actionSuccess('Səbət təmizləndi', '🧹');
           return { success: true };
         } else {
-          toast.error(result.error || 'Səbət təmizlənərkən xəta baş verdi');
+          toastManager.actionError(result.error || 'Səbət təmizlənərkən xəta baş verdi');
           return { success: false, error: result.error };
         }
       } else {
         // Handle guest cart locally
         resetCart();
         clearGuestCartFromStorage();
-        toast.success('Səbət təmizləndi');
+        toastManager.actionSuccess('Səbət təmizləndi', '🧹');
         return { success: true };
       }
     } catch (error) {
       console.error('Clear cart error:', error);
-      toast.error('Səbət təmizlənərkən xəta baş verdi');
+      toastManager.actionError('Səbət təmizlənərkən xəta baş verdi');
       return { success: false, error: error.message };
     } finally {
       setIsLoading(false);
@@ -395,7 +461,7 @@ export const CartProvider = ({ children }) => {
   const applyDiscount = async (discountCode) => {
     try {
       if (!isLoggedIn) {
-        toast.error('Endirim kodu üçün hesabınıza daxil olun');
+        toastManager.actionError('Endirim kodu üçün hesabınıza daxil olun');
         return { success: false, error: 'Authentication required' };
       }
 
@@ -405,15 +471,15 @@ export const CartProvider = ({ children }) => {
 
       if (result.success) {
         await loadCartFromBackend();
-        toast.success('Endirim kodu tətbiq edildi!');
+        toastManager.actionSuccess('Endirim kodu tətbiq edildi!', '🎉');
         return { success: true, data: result.data };
       } else {
-        toast.error(result.error || 'Endirim kodu tətbiq edilərkən xəta baş verdi');
+        toastManager.actionError(result.error || 'Endirim kodu tətbiq edilərkən xəta baş verdi');
         return { success: false, error: result.error };
       }
     } catch (error) {
       console.error('Apply discount error:', error);
-      toast.error('Endirim kodu tətbiq edilərkən xəta baş verdi');
+      toastManager.actionError('Endirim kodu tətbiq edilərkən xəta baş verdi');
       return { success: false, error: error.message };
     } finally {
       setIsLoading(false);
@@ -488,6 +554,19 @@ export const CartProvider = ({ children }) => {
     }
   };
 
+  // ✅ ADDED: Helper function to mark user as just logged in
+  const markUserAsJustLoggedIn = () => {
+    sessionStorage.setItem('user_just_logged_in', 'true');
+    console.log('🔐 User marked as just logged in');
+  };
+
+  // ✅ ADDED: Cleanup function for component unmount
+  useEffect(() => {
+    return () => {
+      console.log('🧹 CartProvider cleanup');
+    };
+  }, []);
+
   const value = {
     // State
     cartItems,
@@ -506,6 +585,7 @@ export const CartProvider = ({ children }) => {
     isInCart,
     getItemQuantity,
     getCartItem,
+    markUserAsJustLoggedIn, // ✅ ADDED: Export this function
     
     // Computed values from totals
     ...cartTotals,

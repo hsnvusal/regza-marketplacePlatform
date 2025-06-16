@@ -16,7 +16,7 @@ const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const cartRoutes = require('./routes/cart');
 const orderRoutes = require('./routes/orders');
-const reviewRoutes = require('./routes/review'); // 🔥 YENİ: Review routes əlavə edildi
+const reviewRoutes = require('./routes/review');
 // const userRoutes = require('./routes/users');
 // const vendorRoutes = require('./routes/vendors');
 // const categoryRoutes = require('./routes/categories');
@@ -141,7 +141,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
-app.use('/api/reviews', reviewRoutes); // 🔥 YENİ: Review routes mount edildi
+app.use('/api/reviews', reviewRoutes); 
 // app.use('/api/users', userRoutes);
 // app.use('/api/vendors', vendorRoutes);
 // app.use('/api/categories', categoryRoutes);
@@ -176,7 +176,7 @@ app.get('/api/test', async (req, res) => {
   }
 });
 
-// 🔥 YENİ: Review test endpoint-i
+
 if (process.env.NODE_ENV === 'development') {
   app.get('/api/test/reviews-setup', async (req, res) => {
     try {

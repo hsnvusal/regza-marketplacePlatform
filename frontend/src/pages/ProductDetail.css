@@ -949,3 +949,37 @@
     background: var(--dark-card, #1e293b);
   }
 }
+
+
+/* ProductDetail.css-ə əlavə edin: */
+.reviews-error, .related-error {
+  padding: 1rem;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.retry-btn-small {
+  background: #3b82f6;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+.reviews-loading, .related-loading {
+  text-align: center;
+  padding: 2rem;
+}
+
+.error-message {
+  margin-bottom: 1rem;
+}
+
+.error-message small {
+  color: #6b7280;
+  font-size: 0.875rem;
+}
