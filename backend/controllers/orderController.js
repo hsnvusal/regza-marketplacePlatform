@@ -31,18 +31,34 @@ const createOrder = asyncHandler(async (req, res) => {
     requestedDeliveryDate,
   } = req.body;
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  // 🔧 TRANSACTION DISABLE (local development üçün)
+  // Production-da MONGODB_REPLICA_SET=true environment variable set edin
+  const useTransaction = process.env.MONGODB_REPLICA_SET === 'true' && process.env.NODE_ENV === 'production';
+  
+  let session = null;
+  if (useTransaction) {
+    session = await mongoose.startSession();
+    session.startTransaction();
+  }
 
   try {
-    // 1. Aktiv səbəti tap (populate olmadan)
-    const cart = await Cart.findOne({
+    console.log(`🚀 Order creation started - User: ${req.user.email} - Transaction: ${useTransaction}`);
+
+    // 1. Aktiv səbəti tap
+    const cartQuery = {
       user: req.user.id,
       status: "active",
-    }).session(session);
+    };
+    
+    const cart = useTransaction 
+      ? await Cart.findOne(cartQuery).session(session)
+      : await Cart.findOne(cartQuery);
+
+    console.log(`📋 Cart found:`, cart ? `${cart.items.length} items` : 'No cart');
 
     if (!cart || cart.isEmpty) {
-      await session.abortTransaction();
+      if (useTransaction && session) await session.abortTransaction();
+      console.log('❌ Cart is empty or not found');
       return ApiResponse.error(res, "Səbət boş və ya tapılmadı", 400);
     }
 
@@ -50,15 +66,20 @@ const createOrder = asyncHandler(async (req, res) => {
     const vendorGroups = {};
 
     for (const item of cart.items) {
+      console.log(`🔍 Processing cart item: ${item.productSnapshot?.name || 'Unknown'}`);
+      
       // Məhsul məlumatını manual al
-      const product = await Product.findById(item.product).session(session);
+      const product = useTransaction
+        ? await Product.findById(item.product).session(session)
+        : await Product.findById(item.product);
 
       // Məhsul mövcudluğunu yoxla
       if (!product || product.status !== "active") {
-        await session.abortTransaction();
+        if (useTransaction && session) await session.abortTransaction();
+        console.log(`❌ Product not found or inactive: ${item.productSnapshot?.name}`);
         return ApiResponse.error(
           res,
-          `Məhsul "${item.productSnapshot.name}" artıq mövcud deyil`,
+          `Məhsul "${item.productSnapshot?.name || 'naməlum'}" artıq mövcud deyil`,
           400
         );
       }
@@ -70,7 +91,8 @@ const createOrder = asyncHandler(async (req, res) => {
         (product.inventory.stock || 0) < item.quantity &&
         product.inventory.allowBackorder !== true
       ) {
-        await session.abortTransaction();
+        if (useTransaction && session) await session.abortTransaction();
+        console.log(`❌ Insufficient stock: ${product.name} - Available: ${product.inventory.stock}, Requested: ${item.quantity}`);
         return ApiResponse.error(
           res,
           `"${product.name}" üçün yetərli stok yoxdur. Mövcud: ${product.inventory.stock || 0}`,
@@ -114,6 +136,8 @@ const createOrder = asyncHandler(async (req, res) => {
       vendorGroups[vendorId].subtotal += item.totalPrice;
     }
 
+    console.log(`🏪 Vendor groups created: ${Object.keys(vendorGroups).length} vendors`);
+
     // 3. Vendor sifarişlərini hazırla
     const vendorOrders = Object.values(vendorGroups).map((group) => ({
       vendor: group.vendor,
@@ -125,17 +149,15 @@ const createOrder = asyncHandler(async (req, res) => {
       total: 0, // Pre-save middleware-də hesablanacaq
     }));
 
-    // 4. Sifarişi yarat
+    // 4. Order number generate
+    const orderNumber = `ORD-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
+    
+    console.log(`📋 Generated order number: ${orderNumber}`);
+
+    // 5. Sifarişi yarat
     const orderData = {
       customer: req.user.id,
-
-      // ORDER NUMBER ƏLAVƏ EDİN:
-      orderNumber: `ORD-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Date.now().toString().slice(-6)}${Math.floor(
-        Math.random() * 1000
-      )
-        .toString()
-        .padStart(3, "0")}`,
-
+      orderNumber: orderNumber,
       vendorOrders,
       status: "pending",
       payment: {
@@ -174,95 +196,117 @@ const createOrder = asyncHandler(async (req, res) => {
     vendorOrders.forEach((vendorOrder, index) => {
       if (!vendorOrder.vendorOrderNumber) {
         const vendorSuffix = String.fromCharCode(65 + index); // A, B, C...
-        const tempOrderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        vendorOrder.vendorOrderNumber = `${tempOrderNumber}-${vendorSuffix}`;
+        vendorOrder.vendorOrderNumber = `${orderNumber}-${vendorSuffix}`;
       }
     });
 
+    console.log(`💾 Creating order with data:`, {
+      orderNumber: orderData.orderNumber,
+      customer: req.user.email,
+      vendorOrdersCount: vendorOrders.length,
+      itemsCount: vendorOrders.reduce((sum, vo) => sum + vo.items.length, 0)
+    });
+
+    // Order yaratma
     const order = new Order(orderData);
-    await order.save({ session });
-
-    // 5. Məhsul stoklarını azalt
-    for (const item of cart.items) {
-      const product = await Product.findById(item.product).session(session);
-
-      if (
-        product &&
-        product.inventory &&
-        product.inventory.trackQuantity === true
-      ) {
-        await Product.findByIdAndUpdate(
-          item.product,
-          {
-            $inc: {
-              "inventory.stock": -item.quantity,
-              "stats.purchases": item.quantity,
-            },
-          },
-          { session }
-        );
-
-        console.log(
-          `📦 Stok azaldıldı: ${product.name} - ${item.quantity} ədəd`
-        );
-      }
+    
+    if (useTransaction && session) {
+      await order.save({ session });
+    } else {
+      await order.save();
     }
 
-    // 6. Səbəti converted et
-    cart.status = "converted";
-    await cart.save({ session });
+    console.log(`✅ Order saved to database: ${order.orderNumber} - ID: ${order._id}`);
 
-    // 7. İstifadəçi statistikasını yenilə
-    await User.findByIdAndUpdate(
-      req.user.id,
-      {
+    // 6. Məhsul stoklarını azalt
+    for (const item of cart.items) {
+      const updateQuery = {
         $inc: {
-          "stats.totalOrders": 1,
-          "stats.totalSpent": order.pricing.total,
+          "inventory.stock": -item.quantity,
+          "stats.purchases": item.quantity,
         },
+      };
+
+      if (useTransaction && session) {
+        await Product.findByIdAndUpdate(item.product, updateQuery, { session });
+      } else {
+        await Product.findByIdAndUpdate(item.product, updateQuery);
+      }
+
+      console.log(`📦 Stock updated: ${item.productSnapshot?.name} - Reduced by ${item.quantity}`);
+    }
+
+   // 7. 🔥 SƏBƏTI SİL - Yeni alış-veriş üçün təmiz cart
+  try {
+    if (useTransaction && session) {
+      await Cart.findOneAndDelete({ user: req.user.id }, { session });
+    } else {
+      await Cart.findOneAndDelete({ user: req.user.id });
+    }
+    console.log(`🗑️ Cart completely cleared for user: ${req.user.email}`);
+  } catch (cartDeleteError) {
+    console.warn(`⚠️ Cart deletion warning:`, cartDeleteError.message);
+    // Order yaradıldı, cart silmə problemi kritik deyil
+    // Fallback: status-u converted et
+    cart.status = "converted";
+    if (useTransaction && session) {
+      await cart.save({ session });
+    } else {
+      await cart.save();
+    }
+    console.log(`🛒 Cart status updated to converted (fallback)`);
+  }
+
+    console.log(`🛒 Cart status updated to: ${cart.status}`);
+
+    // 8. İstifadəçi statistikasını yenilə
+    const userUpdateQuery = {
+      $inc: {
+        "stats.totalOrders": 1,
+        "stats.totalSpent": order.pricing.total,
       },
-      { session }
-    );
+    };
 
-    await session.commitTransaction();
+    if (useTransaction && session) {
+      await User.findByIdAndUpdate(req.user.id, userUpdateQuery, { session });
+      await session.commitTransaction();
+      console.log(`✅ Transaction committed successfully`);
+    } else {
+      await User.findByIdAndUpdate(req.user.id, userUpdateQuery);
+      console.log(`✅ User stats updated (no transaction)`);
+    }
 
-    // 8. Populate məlumatları
+    // 9. Populate məlumatları
     const populatedOrder = await Order.findById(order._id)
       .populate("customer", "firstName lastName email phone")
       .populate("vendorOrders.vendor", "firstName lastName businessName email")
       .populate("vendorOrders.items.product", "name sku images");
 
-    console.log(
-      `✅ Sifariş yaradıldı: ${order.orderNumber} - Müştəri: ${req.user.email} - Məbləğ: ${order.pricing.total} AZN`
-    );
+    console.log(`✅ Order creation completed successfully: ${order.orderNumber} - Customer: ${req.user.email} - Total: ${order.pricing.total} AZN`);
 
-    try {
-      // 1. Müştəriyə order confirmation email
-      await emailService.sendOrderConfirmationEmail(populatedOrder);
-      console.log(
-        `📧 Order confirmation email göndərildi: ${populatedOrder.customer.email}`
-      );
+    // 10. Email notifications (async - don't block response)
+    setTimeout(async () => {
+      try {
+        await emailService.sendOrderConfirmationEmail(populatedOrder);
+        console.log(`📧 Order confirmation email sent: ${populatedOrder.customer.email}`);
 
-      // 2. Vendor-lərə new order notification
-      for (const vendorOrder of populatedOrder.vendorOrders) {
-        if (vendorOrder.vendor && vendorOrder.vendor.email) {
-          await emailService.sendVendorOrderEmail(
-            vendorOrder.vendor.email,
-            populatedOrder,
-            vendorOrder
-          );
-          console.log(
-            `📧 Vendor notification email göndərildi: ${vendorOrder.vendor.email}`
-          );
+        for (const vendorOrder of populatedOrder.vendorOrders) {
+          if (vendorOrder.vendor && vendorOrder.vendor.email) {
+            await emailService.sendVendorOrderEmail(
+              vendorOrder.vendor.email,
+              populatedOrder,
+              vendorOrder
+            );
+            console.log(`📧 Vendor notification sent: ${vendorOrder.vendor.email}`);
+          }
         }
+      } catch (emailError) {
+        console.error("📧 Email sending error:", emailError.message);
       }
-    } catch (emailError) {
-      console.error("📧 Order email xətası:", emailError.message);
-      // Email xətası olsa da order yaradılmasına təsir etməsin
-    }
+    }, 100);
 
-    // 9. Response
-    ApiResponse.success(
+    // 11. Response
+    return ApiResponse.success(
       res,
       {
         order: {
@@ -285,12 +329,16 @@ const createOrder = asyncHandler(async (req, res) => {
       "Sifariş uğurla yaradıldı",
       201
     );
+
   } catch (error) {
-    // Session hələ də açıqdırsa abort et
-    if (session.inTransaction()) {
+    // Session cleanup
+    if (useTransaction && session && session.inTransaction()) {
       await session.abortTransaction();
+      console.log(`❌ Transaction aborted due to error`);
     }
-    console.error("Sifariş yaratma xətası:", error);
+    
+    console.error("❌ Order creation error:", error);
+    console.error("❌ Error stack:", error.stack);
 
     if (error.name === "ValidationError") {
       const messages = Object.values(error.errors).map((err) => err.message);
@@ -304,11 +352,10 @@ const createOrder = asyncHandler(async (req, res) => {
 
     return ApiResponse.error(res, "Sifariş yaradılarkən xəta baş verdi", 500);
   } finally {
-    // Session hələ də açıqdırsa bağla
-    if (session.inTransaction()) {
-      await session.abortTransaction();
+    // Session cleanup
+    if (useTransaction && session) {
+      session.endSession();
     }
-    session.endSession();
   }
 });
 
@@ -867,6 +914,78 @@ const getAllOrders = asyncHandler(async (req, res) => {
 // @desc    Sifariş statistikası
 // @route   GET /api/orders/stats
 // @access  Private
+const getOrderTracking = asyncHandler(async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate('customer', 'firstName lastName email phone')
+      .populate('vendorOrders.vendor', 'firstName lastName businessName')
+      .lean();
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sifariş tapılmadı'
+      });
+    }
+
+    // İcazə yoxlaması
+    if (req.user.role === 'customer' && order.customer._id.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bu sifarişə çıxış icazəniz yoxdur'
+      });
+    }
+
+    if (req.user.role === 'vendor') {
+      const hasVendorOrder = order.vendorOrders.some(
+        vo => vo.vendor._id.toString() === req.user.id
+      );
+      if (!hasVendorOrder) {
+        return res.status(403).json({
+          success: false,
+          message: 'Bu sifarişə çıxış icazəniz yoxdur'
+        });
+      }
+    }
+
+    const trackingInfo = {
+      order: {
+        id: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        placedAt: order.placedAt,
+        estimatedDelivery: order.estimatedDelivery,
+        deliveredAt: order.deliveredAt
+      },
+      customer: order.customer,
+      shippingAddress: order.shippingAddress,
+      tracking: order.tracking,
+      vendorOrders: order.vendorOrders.map(vo => ({
+        id: vo._id,
+        vendor: vo.vendor,
+        status: vo.status,
+        vendorOrderNumber: vo.vendorOrderNumber,
+        tracking: vo.tracking,
+        items: vo.items
+      }))
+    };
+
+    console.log(`✅ Tracking məlumatı alındı: ${order.orderNumber} - İstifadəçi: ${req.user.email}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Tracking məlumatı alındı',
+      data: trackingInfo
+    });
+
+  } catch (error) {
+    console.error('Tracking məlumatı alma xətası:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Tracking məlumatı alınarkən xəta baş verdi'
+    });
+  }
+});
 const getOrderStats = asyncHandler(async (req, res) => {
   try {
     let matchStage = {};
@@ -942,6 +1061,300 @@ const getOrderStats = asyncHandler(async (req, res) => {
   }
 });
 
+
+// @desc    Tracking nömrəsi ilə sifariş tap
+// @route   GET /api/orders/track/:trackingNumber  
+// @access  Public
+const trackByNumber = asyncHandler(async (req, res) => {
+  const { trackingNumber } = req.params;
+
+  try {
+    const order = await Order.findOne({
+      $or: [
+        { 'tracking.trackingNumber': trackingNumber.toUpperCase() },
+        { 'vendorOrders.tracking.trackingNumber': trackingNumber.toUpperCase() }
+      ]
+    })
+    .populate('customer', 'firstName lastName')
+    .populate('vendorOrders.vendor', 'businessName')
+    .lean();
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bu tracking nömrəsi ilə sifariş tapılmadı'
+      });
+    }
+
+    // Public məlumat (məhdud)
+    const publicTrackingInfo = {
+      orderNumber: order.orderNumber,
+      status: order.status,
+      placedAt: order.placedAt,
+      estimatedDelivery: order.estimatedDelivery,
+      tracking: order.tracking ? {
+        trackingNumber: order.tracking.trackingNumber,
+        carrier: order.tracking.carrier,
+        currentStatus: order.tracking.currentStatus,
+        trackingHistory: order.tracking.trackingHistory.map(h => ({
+          status: h.status,
+          description: h.description,
+          timestamp: h.timestamp,
+          location: h.location
+        }))
+      } : null,
+      vendorOrders: order.vendorOrders
+        .filter(vo => vo.tracking?.trackingNumber === trackingNumber.toUpperCase())
+        .map(vo => ({
+          vendor: vo.vendor?.businessName,
+          status: vo.status,
+          tracking: {
+            trackingNumber: vo.tracking.trackingNumber,
+            carrier: vo.tracking.carrier,
+            currentStatus: vo.tracking.currentStatus,
+            trackingHistory: vo.tracking.trackingHistory.map(h => ({
+              status: h.status,
+              description: h.description,
+              timestamp: h.timestamp,
+              location: h.location
+            }))
+          }
+        }))
+    };
+
+    console.log(`✅ Tracking tapıldı: ${trackingNumber} - Sifariş: ${order.orderNumber}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Tracking məlumatı tapıldı',
+      data: publicTrackingInfo
+    });
+
+  } catch (error) {
+    console.error('Tracking tapma xətası:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Tracking məlumatı axtarılarkən xəta baş verdi'
+    });
+  }
+});
+
+// @desc    Tracking məlumatı əlavə et/yenilə
+// @route   PUT /api/orders/:id/tracking
+// @access  Private (Vendor/Admin)
+const updateTracking = asyncHandler(async (req, res) => {
+  const { 
+    trackingNumber, 
+    carrier, 
+    carrierName,
+    trackingUrl, 
+    estimatedDelivery,
+    deliveryInstructions,
+    vendorOrderId 
+  } = req.body;
+
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sifariş tapılmadı'
+      });
+    }
+
+    // İcazə yoxlaması
+    if (req.user.role === 'vendor') {
+      const hasVendorOrder = order.vendorOrders.some(
+        vo => vo.vendor.toString() === req.user.id
+      );
+      if (!hasVendorOrder) {
+        return res.status(403).json({
+          success: false,
+          message: 'Bu sifarişə çıxış icazəniz yoxdur'
+        });
+      }
+    }
+
+    const trackingData = {
+      trackingNumber,
+      carrier,
+      carrierName: carrierName || carrier,
+      trackingUrl,
+      currentStatus: 'shipped',
+      estimatedDelivery: estimatedDelivery ? new Date(estimatedDelivery) : null,
+      lastUpdated: new Date(),
+      deliveryInstructions,
+      trackingHistory: [{
+        status: 'shipped',
+        description: 'Məhsul göndərildi',
+        timestamp: new Date(),
+        updatedBy: req.user.role
+      }]
+    };
+
+    if (vendorOrderId) {
+      // Vendor order tracking
+      const vendorOrder = order.vendorOrders.find(
+        vo => vo._id.toString() === vendorOrderId
+      );
+      
+      if (!vendorOrder) {
+        return res.status(404).json({
+          success: false,
+          message: 'Vendor sifarişi tapılmadı'
+        });
+      }
+
+      vendorOrder.tracking = trackingData;
+      vendorOrder.status = 'shipped';
+      vendorOrder.shippedAt = new Date();
+
+    } else {
+      // Ümumi order tracking
+      order.tracking = trackingData;
+      order.status = 'shipped';
+      order.shippedAt = new Date();
+    }
+
+    await order.save();
+
+    console.log(`✅ Tracking əlavə edildi: ${order.orderNumber} - ${trackingNumber}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Tracking məlumatı əlavə edildi',
+      data: {
+        order: {
+          id: order._id,
+          orderNumber: order.orderNumber,
+          tracking: order.tracking,
+          status: order.status
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Tracking əlavə etmə xətası:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Tracking məlumatı əlavə edilərkən xəta baş verdi'
+    });
+  }
+});
+
+// @desc    Tracking status yenilə
+// @route   PUT /api/orders/:id/tracking/status
+// @access  Private (Vendor/Admin)
+const updateTrackingStatus = asyncHandler(async (req, res) => {
+  const { 
+    status, 
+    location, 
+    description, 
+    vendorOrderId 
+  } = req.body;
+
+  const validStatuses = [
+    'shipped', 'in_transit', 'out_for_delivery', 
+    'delivered', 'failed_delivery', 'returned'
+  ];
+
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Yanlış tracking status'
+    });
+  }
+
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Sifariş tapılmadı'
+      });
+    }
+
+    let trackingObj = order.tracking;
+
+    if (vendorOrderId) {
+      const vendorOrder = order.vendorOrders.find(
+        vo => vo._id.toString() === vendorOrderId
+      );
+      trackingObj = vendorOrder?.tracking;
+    }
+
+    if (!trackingObj) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tracking məlumatı tapılmadı'
+      });
+    }
+
+    // Status yenilə
+    trackingObj.currentStatus = status;
+    trackingObj.lastUpdated = new Date();
+
+    if (status === 'delivered') {
+      trackingObj.actualDelivery = new Date();
+      order.status = 'delivered';
+      order.deliveredAt = new Date();
+    }
+
+    // Tracking tarixçəsinə əlavə et
+    const historyEntry = {
+      status,
+      timestamp: new Date(),
+      description: description || getStatusDescription(status),
+      updatedBy: req.user.role
+    };
+
+    if (location) {
+      historyEntry.location = location;
+    }
+
+    trackingObj.trackingHistory.push(historyEntry);
+
+    await order.save();
+
+    console.log(`✅ Tracking status yeniləndi: ${order.orderNumber} - ${status}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Tracking status yeniləndi',
+      data: {
+        order: {
+          id: order._id,
+          orderNumber: order.orderNumber,
+          tracking: trackingObj,
+          status: order.status
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Tracking status yeniləmə xətası:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Tracking status yenilənərkən xəta baş verdi'
+    });
+  }
+});
+
+// Helper function
+function getStatusDescription(status) {
+  const descriptions = {
+    'shipped': 'Məhsul göndərildi',
+    'in_transit': 'Yolda',
+    'out_for_delivery': 'Çatdırılma üçün yolda',
+    'delivered': 'Çatdırıldı',
+    'failed_delivery': 'Çatdırılma uğursuz',
+    'returned': 'Geri qaytarıldı'
+  };
+  return descriptions[status] || status;
+}
+
 module.exports = {
   createOrder,
   getMyOrders,
@@ -952,4 +1365,9 @@ module.exports = {
   addTracking,
   getAllOrders,
   getOrderStats,
+  trackByNumber,
+  updateTracking,
+  updateTrackingStatus,
+  getOrderTracking
+
 };

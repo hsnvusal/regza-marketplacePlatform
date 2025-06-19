@@ -6,6 +6,8 @@ import Home from '../pages/Home'
 import ProductsPage from '../pages/ProductsPage'
 import ProductDetailPage from '../pages/ProductDetailPage'
 import CartPage from '../pages/CartPage'
+import OrdersPage from '../pages/OrdersPage'
+import OrderTrackingPage from '../pages/OrderTrackingPage'
 import LoginPage from '../pages/LoginPage'
 import RegisterPage from '../pages/RegisterPage'
 import DashboardPage from '../pages/DashboardPage'
@@ -25,7 +27,7 @@ const LoadingScreen = () => (
   }}>
     <div style={{ textAlign: 'center' }}>
       <div style={{ 
-        fontSize: '48px', 
+        fontSize: '48px',
         marginBottom: '20px',
         animation: 'spin 2s linear infinite'
       }}>
@@ -52,35 +54,35 @@ const LoadingScreen = () => (
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
   const { isLoggedIn, isInitialized } = useAuth();
-  
+   
   console.log('🛡️ ProtectedRoute check - isLoggedIn:', isLoggedIn, 'isInitialized:', isInitialized);
-  
+   
   // Auth hələ də initialize olmayıbsa loading göstər
   if (!isInitialized) {
     console.log('⏳ ProtectedRoute: Auth not initialized yet, showing loading');
     return <LoadingScreen />;
   }
-  
+   
   if (!isLoggedIn) {
     console.log('❌ ProtectedRoute: User not logged in, redirecting to login');
     return <Navigate to="/login" replace />;
   }
-  
+   
   console.log('✅ ProtectedRoute: User authenticated, allowing access');
   return children;
 };
 
 const Router = () => {
   const { isLoading, isInitialized, isLoggedIn } = useAuth();
-
+ 
   // Show loading while auth is initializing
   if (isLoading || !isInitialized) {
     console.log('🔄 Router: Auth loading state:', { isLoading, isInitialized });
     return <LoadingScreen />;
   }
-
+ 
   console.log('✅ Router: Auth initialized, rendering routes. isLoggedIn:', isLoggedIn);
-
+ 
   return (
     <Routes>
       {/* Main Layout Routes */}
@@ -89,34 +91,53 @@ const Router = () => {
         <Route index element={<Home />} />
         <Route path='/products' element={<ProductsPage />} />
         <Route path='/products/:id' element={<ProductDetailPage />} />
-        
+                
         {/* PROTECTED ROUTES - Login required */}
         <Route 
-          path='/cart' 
+          path='/cart'
           element={
             <ProtectedRoute>
               <CartPage />
             </ProtectedRoute>
-          } 
-        />
+          }
+         />
         <Route 
-          path='/dashboard' 
+          path='/orders'
+          element={
+            <ProtectedRoute>
+              <OrdersPage />
+            </ProtectedRoute>
+          }
+         />
+        
+        {/* 🔥 ORDER TRACKING ROUTE - ƏLAVƏ EDİLDİ */}
+        <Route 
+          path='/orders/:orderId/tracking'
+          element={
+            <ProtectedRoute>
+              <OrderTrackingPage />
+            </ProtectedRoute>
+          }
+         />
+        
+        <Route 
+          path='/dashboard'
           element={
             <ProtectedRoute>
               <DashboardPage />
             </ProtectedRoute>
-          } 
-        />
+          }
+         />
       </Route>
-           
+                
       {/* Auth Routes (without main layout) */}
       <Route 
-        path='/login' 
+        path='/login'
         element={
           isLoggedIn ? (
             <>
-              {console.log('🔄 Login page: User already logged in, redirecting to home')}
-              <Navigate to="/" replace />
+              {console.log('🔄 Login page: User already logged in, redirecting to dashboard')}
+              <Navigate to="/dashboard" replace />
             </>
           ) : (
             <>
@@ -124,15 +145,15 @@ const Router = () => {
               <LoginPage />
             </>
           )
-        } 
-      />
+        }
+       />
       <Route 
-        path='/register' 
+        path='/register'
         element={
           isLoggedIn ? (
             <>
-              {console.log('🔄 Register page: User already logged in, redirecting to home')}
-              <Navigate to="/" replace />
+              {console.log('🔄 Register page: User already logged in, redirecting to dashboard')}
+              <Navigate to="/dashboard" replace />
             </>
           ) : (
             <>
@@ -140,9 +161,9 @@ const Router = () => {
               <RegisterPage />
             </>
           )
-        } 
-      />
-           
+        }
+       />
+                
       {/* 404 */}
       <Route path='*' element={<NotFound />} />
     </Routes>

@@ -1,5 +1,91 @@
 const mongoose = require('mongoose');
 
+// Enhanced tracking schema
+const trackingSchema = new mongoose.Schema({
+  trackingNumber: {
+    type: String,
+    trim: true,
+    uppercase: true
+  },
+  carrier: {
+    type: String,
+    enum: ['azerpost', 'bravo', 'express', 'pickup', 'other'],
+    default: 'azerpost'
+  },
+  carrierName: {
+    type: String,
+    trim: true
+  },
+  trackingUrl: {
+    type: String,
+    trim: true
+  },
+  currentStatus: {
+    type: String,
+    enum: ['shipped', 'in_transit', 'out_for_delivery', 'delivered', 'failed_delivery', 'returned'],
+    default: 'shipped'
+  },
+  estimatedDelivery: {
+    type: Date
+  },
+  actualDelivery: {
+    type: Date
+  },
+  lastUpdated: {
+    type: Date,
+    default: Date.now
+  },
+  trackingHistory: [{
+    status: {
+      type: String,
+      required: true
+    },
+    location: {
+      city: String,
+      address: String
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now
+    },
+    description: {
+      type: String,
+      trim: true
+    },
+    updatedBy: {
+      type: String,
+      enum: ['system', 'vendor', 'carrier', 'admin']
+    }
+  }],
+  deliveryAttempts: [{
+    attemptDate: {
+      type: Date,
+      default: Date.now
+    },
+    status: {
+      type: String,
+      enum: ['failed', 'successful', 'rescheduled'],
+      required: true
+    },
+    reason: {
+      type: String,
+      trim: true
+    },
+    nextAttempt: {
+      type: Date
+    },
+    notes: {
+      type: String,
+      trim: true
+    }
+  }],
+  deliveryInstructions: {
+    type: String,
+    trim: true,
+    maxlength: 500
+  }
+});
+
 const orderSchema = new mongoose.Schema({
   // Order məlumatları
   orderNumber: {
@@ -125,14 +211,8 @@ const orderSchema = new mongoose.Schema({
       min: [0, 'Ümumi məbləğ mənfi ola bilməz']
     },
     
-    // Çatdırılma məlumatları
-    tracking: {
-      trackingNumber: String,
-      carrier: String,
-      estimatedDelivery: Date,
-      actualDelivery: Date,
-      trackingUrl: String
-    },
+    // Enhanced vendor tracking
+    tracking: trackingSchema,
     
     // Vendor qeydləri
     vendorNotes: {
@@ -153,6 +233,9 @@ const orderSchema = new mongoose.Schema({
     enum: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded', 'completed'],
     default: 'pending'
   },
+  
+  // Main order tracking (when there's a single package for all vendors)
+  tracking: trackingSchema,
   
   // Ödəniş məlumatları
   payment: {
@@ -438,6 +521,10 @@ orderSchema.virtual('estimatedDelivery').get(function() {
     .map(vo => vo.tracking?.estimatedDelivery)
     .filter(date => date);
   
+  if (this.tracking?.estimatedDelivery) {
+    deliveryDates.push(this.tracking.estimatedDelivery);
+  }
+  
   return deliveryDates.length > 0 ? new Date(Math.max(...deliveryDates)) : null;
 });
 
@@ -449,6 +536,12 @@ orderSchema.index({ 'payment.status': 1 });
 orderSchema.index({ placedAt: -1 });
 orderSchema.index({ 'vendorOrders.vendor': 1 });
 orderSchema.index({ 'vendorOrders.status': 1 });
+
+// Tracking indexes
+orderSchema.index({ 'tracking.trackingNumber': 1 });
+orderSchema.index({ 'vendorOrders.tracking.trackingNumber': 1 });
+orderSchema.index({ 'tracking.currentStatus': 1 });
+orderSchema.index({ 'vendorOrders.tracking.currentStatus': 1 });
 
 // Compound indexes
 orderSchema.index({ customer: 1, status: 1 });
@@ -631,6 +724,89 @@ orderSchema.methods.addTracking = function(vendorId, trackingData) {
   }
   
   return this.save();
+};
+
+// Instance method - tracking status yenilə
+orderSchema.methods.updateTrackingStatus = function(trackingNumber, newStatus, location, description, updatedBy) {
+  let updated = false;
+  
+  // Əsas order tracking yoxla
+  if (this.tracking && this.tracking.trackingNumber === trackingNumber.toUpperCase()) {
+    this.tracking.currentStatus = newStatus;
+    this.tracking.lastUpdated = new Date();
+    
+    if (newStatus === 'delivered') {
+      this.tracking.actualDelivery = new Date();
+      this.status = 'delivered';
+      this.deliveredAt = new Date();
+    }
+    
+    this.tracking.trackingHistory.push({
+      status: newStatus,
+      location,
+      description,
+      timestamp: new Date(),
+      updatedBy
+    });
+    
+    updated = true;
+  }
+  
+  // Vendor orders tracking yoxla
+  this.vendorOrders.forEach(vendorOrder => {
+    if (vendorOrder.tracking && vendorOrder.tracking.trackingNumber === trackingNumber.toUpperCase()) {
+      vendorOrder.tracking.currentStatus = newStatus;
+      vendorOrder.tracking.lastUpdated = new Date();
+      
+      if (newStatus === 'delivered') {
+        vendorOrder.tracking.actualDelivery = new Date();
+        vendorOrder.status = 'delivered';
+        vendorOrder.deliveredAt = new Date();
+      }
+      
+      vendorOrder.tracking.trackingHistory.push({
+        status: newStatus,
+        location,
+        description,
+        timestamp: new Date(),
+        updatedBy
+      });
+      
+      updated = true;
+    }
+  });
+  
+  if (updated) {
+    return this.save();
+  } else {
+    throw new Error('Tracking nömrəsi tapılmadı');
+  }
+};
+
+// Instance method - tracking nömrəsi axtarışı
+orderSchema.methods.findTrackingByNumber = function(trackingNumber) {
+  const upperTrackingNumber = trackingNumber.toUpperCase();
+  
+  // Əsas order tracking-də axtarış
+  if (this.tracking && this.tracking.trackingNumber === upperTrackingNumber) {
+    return {
+      type: 'main',
+      tracking: this.tracking
+    };
+  }
+  
+  // Vendor orders tracking-də axtarış
+  for (let vendorOrder of this.vendorOrders) {
+    if (vendorOrder.tracking && vendorOrder.tracking.trackingNumber === upperTrackingNumber) {
+      return {
+        type: 'vendor',
+        vendorOrderId: vendorOrder._id,
+        tracking: vendorOrder.tracking
+      };
+    }
+  }
+  
+  return null;
 };
 
 module.exports = mongoose.model('Order', orderSchema);

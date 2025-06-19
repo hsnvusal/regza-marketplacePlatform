@@ -9,7 +9,12 @@ const {
   updateVendorOrderStatus,
   addTracking,
   getAllOrders,
-  getOrderStats
+  getOrderStats,
+  // ← Bu tracking metodlarını import edin
+  trackByNumber,
+  updateTracking,
+  updateTrackingStatus,
+  getOrderTracking
 } = require('../controllers/orderController');
 const { protect, authorize, vendorOrAdmin } = require('../middleware/auth');
 
@@ -117,6 +122,11 @@ const trackingValidation = [
     .withMessage('Tracking nömrəsi 3-50 simvol arası olmalıdır'),
   
   body('carrier')
+    .isIn(['azerpost', 'bravo', 'express', 'pickup', 'other'])
+    .withMessage('Düzgün daşıyıcı seçin'),
+  
+  body('carrierName')
+    .optional()
     .trim()
     .isLength({ min: 2, max: 100 })
     .withMessage('Daşıyıcı adı 2-100 simvol arası olmalıdır'),
@@ -129,7 +139,74 @@ const trackingValidation = [
   body('trackingUrl')
     .optional()
     .isURL()
-    .withMessage('Düzgün URL formatı daxil edin')
+    .withMessage('Düzgün URL formatı daxil edin'),
+  
+  body('deliveryInstructions')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Çatdırılma təlimatı 500 simvoldan çox ola bilməz'),
+  
+  body('vendorOrderId')
+    .optional()
+    .isMongoId()
+    .withMessage('Düzgün vendor order ID formatı')
+];
+
+const trackingStatusValidation = [
+  body('status')
+    .isIn(['shipped', 'in_transit', 'out_for_delivery', 'delivered', 'failed_delivery', 'returned'])
+    .withMessage('Düzgün tracking status seçin'),
+  
+  body('location.city')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Şəhər adı 2-100 simvol arası olmalıdır'),
+  
+  body('location.address')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Ünvan 200 simvoldan çox ola bilməz'),
+  
+  body('description')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Təsvir 500 simvoldan çox ola bilməz'),
+  
+  body('vendorOrderId')
+    .optional()
+    .isMongoId()
+    .withMessage('Düzgün vendor order ID formatı'),
+  
+  body('estimatedDelivery')
+    .optional()
+    .isISO8601()
+    .withMessage('Düzgün tarix formatı daxil edin'),
+  
+  body('deliveryAttempt.status')
+    .optional()
+    .isIn(['failed', 'successful', 'rescheduled'])
+    .withMessage('Çatdırılma cəhdi statusu failed, successful və ya rescheduled ola bilər'),
+  
+  body('deliveryAttempt.reason')
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Çatdırılma cəhdi səbəbi 200 simvoldan çox ola bilməz'),
+  
+  body('deliveryAttempt.nextAttempt')
+    .optional()
+    .isISO8601()
+    .withMessage('Növbəti cəhd tarixi düzgün formatda olmalıdır'),
+  
+  body('deliveryAttempt.notes')
+    .optional()
+    .trim()
+    .isLength({ max: 300 })
+    .withMessage('Çatdırılma cəhdi qeydi 300 simvoldan çox ola bilməz')
 ];
 
 const orderQueryValidation = [
@@ -165,222 +242,31 @@ const orderIdValidation = [
     .withMessage('Düzgün sifariş ID formatı daxil edin')
 ];
 
+const trackingNumberValidation = [
+  param('trackingNumber')
+    .trim()
+    .isLength({ min: 3, max: 50 })
+    .withMessage('Tracking nömrəsi 3-50 simvol arası olmalıdır')
+    .isAlphanumeric()
+    .withMessage('Tracking nömrəsi yalnız hərf və rəqəmlərdən ibarət ola bilər')
+];
+
+// ===========================================
+// PUBLIC ROUTES - Authentication tələb olunmur
+// ===========================================
+
+// @route   GET /api/orders/track/:trackingNumber
+// @desc    Public tracking by tracking number
+// @access  Public
+router.get('/track/:trackingNumber', trackingNumberValidation, trackByNumber);
+
 // ===========================================
 // PROTECTED ROUTES - Authentication tələb olunur
 // ===========================================
 
-// Bütün order route-ları authentication tələb edir
+// Qalan route-lar authentication tələb edir
 router.use(protect);
 
-// @route   GET /api/orders/info/routes
-// @desc    Mövcud route-ları göstər (development üçün)
-// @access  Private
-if (process.env.NODE_ENV === 'development') {
-  router.get('/info/routes', (req, res) => {
-    res.json({
-      success: true,
-      message: 'Orders API Routes',
-      routes: {
-        customer: {
-          'POST /api/orders': 'Səbətdən sifariş yarat',
-          'GET /api/orders': 'Öz sifarişlərini al',
-          'GET /api/orders/stats': 'Öz sifariş statistikası',
-          'GET /api/orders/:id': 'Sifariş detayı',
-          'PUT /api/orders/:id/cancel': 'Sifarişi ləğv et',
-          'GET /api/orders/info/routes': 'Route siyahısı (dev only)'
-        },
-        vendor: {
-          'GET /api/orders/vendor/my-orders': 'Vendor sifarişləri',
-          'PUT /api/orders/:id/vendor-status': 'Vendor sifariş statusunu yenilə',
-          'PUT /api/orders/:id/tracking': 'Tracking məlumatı əlavə et'
-        },
-        admin: {
-          'GET /api/orders/admin/all': 'Bütün sifarişlər (admin)',
-          'All customer/vendor routes': 'Admin bütün əməliyyatları görə bilər'
-        },
-        authentication: {
-          header: 'Authorization: Bearer TOKEN_HERE',
-          note: 'Bütün route-lar authentication tələb edir'
-        },
-        orderStatuses: {
-          pending: 'Gözləyir',
-          confirmed: 'Təsdiqləndi',
-          processing: 'İşlənir',
-          shipped: 'Göndərildi',
-          delivered: 'Çatdırıldı',
-          cancelled: 'Ləğv edildi',
-          refunded: 'Geri qaytarıldı',
-          completed: 'Tamamlandı'
-        },
-        paymentMethods: {
-          credit_card: 'Kredit kartı',
-          debit_card: 'Debit kartı',
-          paypal: 'PayPal',
-          bank_transfer: 'Bank köçürməsi',
-          cash_on_delivery: 'Qapıda ödəniş',
-          crypto: 'Kripto valyuta'
-        },
-        validation: {
-          createOrder: {
-            required: [
-              'shippingAddress.firstName',
-              'shippingAddress.lastName', 
-              'shippingAddress.phone',
-              'shippingAddress.street',
-              'shippingAddress.city',
-              'paymentMethod'
-            ],
-            optional: [
-              'billingAddress',
-              'customerNotes',
-              'specialInstructions',
-              'requestedDeliveryDate'
-            ]
-          },
-          cancelOrder: {
-            required: ['reason'],
-            note: 'Yalnız pending və confirmed statusunda olan sifarişlər ləğv edilə bilər'
-          },
-          vendorStatus: {
-            required: ['status'],
-            optional: ['vendorNotes', 'trackingInfo'],
-            allowedStatuses: ['confirmed', 'processing', 'shipped', 'delivered']
-          },
-          tracking: {
-            required: ['trackingNumber', 'carrier'],
-            optional: ['estimatedDelivery', 'trackingUrl']
-          }
-        },
-        examples: {
-          createOrder: {
-            shippingAddress: {
-              firstName: 'Əli',
-              lastName: 'Məmmədov',
-              phone: '+994501234567',
-              email: 'ali@example.com',
-              street: 'Nizami küçəsi 123',
-              city: 'Bakı',
-              country: 'Azerbaijan',
-              deliveryInstructions: 'Qapının yanında buraxın'
-            },
-            billingAddress: {
-              type: 'personal',
-              firstName: 'Əli',
-              lastName: 'Məmmədov',
-              phone: '+994501234567',
-              email: 'ali@example.com',
-              street: 'Nizami küçəsi 123',
-              city: 'Bakı',
-              country: 'Azerbaijan'
-            },
-            paymentMethod: 'credit_card',
-            customerNotes: 'Xüsusi qeyd',
-            specialInstructions: {
-              giftWrap: true,
-              giftMessage: 'Ad günün mübarək!',
-              priority: 'normal'
-            },
-            requestedDeliveryDate: '2024-12-25T10:00:00.000Z'
-          },
-          cancelOrder: {
-            reason: 'Artıq ehtiyacım yoxdur'
-          },
-          vendorStatus: {
-            status: 'shipped',
-            vendorNotes: 'DHL ilə göndərildi',
-            trackingInfo: {
-              trackingNumber: 'DHL123456789',
-              carrier: 'DHL',
-              estimatedDelivery: '2024-12-20T15:00:00.000Z'
-            }
-          },
-          tracking: {
-            trackingNumber: 'DHL123456789',
-            carrier: 'DHL Express',
-            estimatedDelivery: '2024-12-20T15:00:00.000Z',
-            trackingUrl: 'https://dhl.com/track/DHL123456789'
-          }
-        },
-        queryParameters: {
-          orders: {
-            page: 'Səhifə nömrəsi (default: 1)',
-            limit: 'Səhifə başına sifariş sayı (default: 10, max: 100)',
-            status: 'Sifariş statusu',
-            startDate: 'Başlanğıc tarixi (ISO format)',
-            endDate: 'Bitmə tarixi (ISO format)'
-          },
-          adminOrders: {
-            customer: 'Müştəri ID-si',
-            vendor: 'Vendor ID-si',
-            'all order filters': 'Yuxarıdakı filtrlər də istifadə edilə bilər'
-          }
-        },
-        orderFlow: {
-          customer: [
-            '1. Səbətə məhsul əlavə et',
-            '2. Səbəti yoxla',
-            '3. Sifariş yarat (POST /api/orders)',
-            '4. Ödəniş et',
-            '5. Sifariş statusunu izlə',
-            '6. Lazım gələrsə ləğv et'
-          ],
-          vendor: [
-            '1. Yeni sifarişləri yoxla',
-            '2. Sifarişi təsdiqlə',
-            '3. Məhsulu hazırla',
-            '4. Göndər və tracking əlavə et',
-            '5. Çatdırıldığını təsdiqlə'
-          ]
-        },
-        businessRules: {
-          orderCreation: [
-            'Səbət boş olmamalıdır',
-            'Bütün məhsullar aktiv olmalıdır',
-            'Stok yetərli olmalıdır',
-            'Çatdırılma ünvanı tam olmalıdır'
-          ],
-          cancellation: [
-            'Yalnız pending/confirmed statusunda ləğv edilə bilər',
-            'Ləğv səbəbi minimum 5 simvol olmalıdır',
-            'Stoklar geri qaytarılır',
-            'Ödəniş geri qaytarıla bilər'
-          ],
-          vendorOperations: [
-            'Vendor yalnız öz sifarişlərini görə bilər',
-            'Status geriyə dəyişdirilə bilməz',
-            'Tracking shipping zamanı əlavə edilir',
-            'Delivered status son statusdur'
-          ]
-        },
-        responseStructure: {
-          order: {
-            id: 'Sifariş ID-si',
-            orderNumber: 'Unikal sifariş nömrəsi (ORD-202412-123456)',
-            status: 'Sifariş statusu',
-            customer: 'Müştəri məlumatları',
-            vendorOrders: [
-              {
-                vendor: 'Vendor məlumatları',
-                vendorOrderNumber: 'Vendor sifariş nömrəsi',
-                items: 'Məhsul siyahısı',
-                status: 'Vendor sifariş statusu',
-                tracking: 'Tracking məlumatları',
-                pricing: 'Qiymət hesablamaları'
-              }
-            ],
-            pricing: 'Ümumi qiymət hesablamaları',
-            shippingAddress: 'Çatdırılma ünvanı',
-            payment: 'Ödəniş məlumatları',
-            orderHistory: 'Status dəyişiklik tarixçəsi',
-            placedAt: 'Sifariş tarixi'
-          }
-        }
-      }
-    });
-  });
-}
-
-module.exports = router;
 // @route   POST /api/orders
 // @desc    Səbətdən sifariş yarat
 // @access  Private
@@ -400,6 +286,11 @@ router.get('/stats', getOrderStats);
 // @desc    Sifariş detayı
 // @access  Private
 router.get('/:id', orderIdValidation, getOrder);
+
+// @route   GET /api/orders/:id/tracking
+// @desc    Order tracking məlumatı al
+// @access  Private
+router.get('/:id/tracking', orderIdValidation, getOrderTracking);
 
 // @route   PUT /api/orders/:id/cancel
 // @desc    Sifarişi ləğv et
@@ -425,12 +316,21 @@ router.put('/:id/vendor-status',
 );
 
 // @route   PUT /api/orders/:id/tracking
-// @desc    Tracking məlumatı əlavə et
-// @access  Private (Vendor)
+// @desc    Tracking məlumatı əlavə et/yenilə (Enhanced)
+// @access  Private (Vendor/Admin)
 router.put('/:id/tracking', 
   authorize('vendor', 'admin'), 
   [orderIdValidation, ...trackingValidation], 
-  addTracking
+  updateTracking
+);
+
+// @route   PUT /api/orders/:id/tracking/status
+// @desc    Tracking status yenilə
+// @access  Private (Vendor/Admin)
+router.put('/:id/tracking/status', 
+  authorize('vendor', 'admin'), 
+  [orderIdValidation, ...trackingStatusValidation], 
+  updateTrackingStatus
 );
 
 // ===========================================
@@ -446,4 +346,117 @@ router.get('/admin/all', authorize('admin'), orderQueryValidation, getAllOrders)
 // ROUTE INFO - Development üçün
 // ===========================================
 
-// @route
+// @route   GET /api/orders/info/routes
+// @desc    Mövcud route-ları göstər (development üçün)
+// @access  Private
+if (process.env.NODE_ENV === 'development') {
+  router.get('/info/routes', (req, res) => {
+    res.json({
+      success: true,
+      message: 'Orders API Routes',
+      routes: {
+        public: {
+          'GET /api/orders/track/:trackingNumber': 'Public tracking by tracking number'
+        },
+        customer: {
+          'POST /api/orders': 'Səbətdən sifariş yarat',
+          'GET /api/orders': 'Öz sifarişlərini al',
+          'GET /api/orders/stats': 'Öz sifariş statistikası',
+          'GET /api/orders/:id': 'Sifariş detayı',
+          'GET /api/orders/:id/tracking': 'Sifariş tracking məlumatı',
+          'PUT /api/orders/:id/cancel': 'Sifarişi ləğv et',
+          'GET /api/orders/info/routes': 'Route siyahısı (dev only)'
+        },
+        vendor: {
+          'GET /api/orders/vendor/my-orders': 'Vendor sifarişləri',
+          'PUT /api/orders/:id/vendor-status': 'Vendor sifariş statusunu yenilə',
+          'PUT /api/orders/:id/tracking': 'Tracking məlumatı əlavə et/yenilə',
+          'PUT /api/orders/:id/tracking/status': 'Tracking status yenilə'
+        },
+        admin: {
+          'GET /api/orders/admin/all': 'Bütün sifarişlər (admin)',
+          'All customer/vendor routes': 'Admin bütün əməliyyatları görə bilər'
+        },
+        tracking: {
+          publicTracking: {
+            'GET /api/orders/track/:trackingNumber': 'Hər kəs tracking nömrəsi ilə yoxlaya bilər',
+            example: '/api/orders/track/TR123456789AZ',
+            note: 'Authentication tələb olunmur'
+          },
+          vendorTracking: {
+            'PUT /api/orders/:orderId/tracking': 'Tracking məlumatı əlavə et',
+            'PUT /api/orders/:orderId/tracking/status': 'Tracking status yenilə',
+            note: 'Vendor və ya admin icazəsi lazımdır'
+          },
+          customerTracking: {
+            'GET /api/orders/:orderId/tracking': 'Öz sifarişinin tracking məlumatı',
+            note: 'Sifariş sahibi və ya admin görmə icazəsi'
+          }
+        },
+        trackingStatuses: {
+          shipped: 'Göndərildi',
+          in_transit: 'Yoldadır',
+          out_for_delivery: 'Çatdırılma üçün yolda',
+          delivered: 'Çatdırıldı',
+          failed_delivery: 'Çatdırılma uğursuz',
+          returned: 'Geri qaytarıldı'
+        },
+        carriers: {
+          azerpost: 'Azərpoçt',
+          bravo: 'Bravo Express',
+          express: 'Express Post',
+          pickup: 'Özü götürmə',
+          other: 'Digər'
+        },
+        validation: {
+          trackingCreation: {
+            required: ['trackingNumber', 'carrier'],
+            optional: ['carrierName', 'estimatedDelivery', 'trackingUrl', 'deliveryInstructions', 'vendorOrderId'],
+            example: {
+              trackingNumber: 'TR123456789AZ',
+              carrier: 'azerpost',
+              carrierName: 'Azərpoçt Express',
+              estimatedDelivery: '2024-12-25T15:00:00.000Z',
+              trackingUrl: 'https://azerpost.az/track/TR123456789AZ',
+              deliveryInstructions: 'Qapının yanında buraxın'
+            }
+          },
+          trackingStatusUpdate: {
+            required: ['status'],
+            optional: ['location', 'description', 'vendorOrderId', 'estimatedDelivery', 'deliveryAttempt'],
+            example: {
+              status: 'in_transit',
+              location: {
+                city: 'Gəncə',
+                address: 'Gəncə Poçt Müdiriyyəti'
+              },
+              description: 'Məhsul Gəncə şəhərinə çatdı',
+              deliveryAttempt: {
+                status: 'failed',
+                reason: 'Müştəri evdə yox idi',
+                nextAttempt: '2024-12-21T10:00:00.000Z',
+                notes: 'Səhər saatları üçün təyin edildi'
+              }
+            }
+          }
+        },
+        examples: {
+          trackingFlow: [
+            '1. Vendor məhsulu göndərir və tracking yaradır',
+            '2. Kargo şirkəti status yeniliklərini göndərir',
+            '3. Müştəri tracking nömrəsi ilə izləyir',
+            '4. Çatdırılma zamanı delivered status əlavə edilir'
+          ],
+          apiCalls: {
+            createTracking: 'PUT /api/orders/673abc123def456/tracking',
+            updateStatus: 'PUT /api/orders/673abc123def456/tracking/status',
+            publicTrack: 'GET /api/orders/track/TR123456789AZ',
+            customerTrack: 'GET /api/orders/673abc123def456/tracking'
+          }
+        }
+      }
+    });
+  });
+}
+
+module.exports = router;

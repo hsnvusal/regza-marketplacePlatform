@@ -9,7 +9,33 @@ const { validationResult } = require('express-validator');
 // @access  Private
 const getCart = asyncHandler(async (req, res) => {
   try {
-    const cart = await Cart.findOrCreateCart(req.user.id);
+    console.log(`🔍 Getting cart for user: ${req.user.id}`);
+
+    // FINDORCREATE istifadə etməyin - sadəcə mövcud cart-ı tapın
+    let cart = await Cart.findOne({ 
+      user: req.user.id, 
+      status: 'active' 
+    });
+
+    // Əgər cart yoxdursa, boş response qaytar
+    if (!cart) {
+      console.log(`📦 No active cart found for user: ${req.user.id}`);
+      return res.status(200).json({
+        success: true,
+        message: 'Səbət boşdur',
+        data: {
+          cart: null,
+          meta: {
+            isEmpty: true,
+            itemCount: 0,
+            hasExpiredItems: false,
+            expiredItemsCount: 0,
+            uniqueVendors: 0
+          }
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
     
     // Populate product details
     await cart.populate({
@@ -26,23 +52,33 @@ const getCart = asyncHandler(async (req, res) => {
     const validItems = [];
 
     cart.items.forEach(item => {
+      // Daha təhlükəsiz yoxlama
       if (!item.product || 
           item.product.status !== 'active' || 
-          item.product.visibility !== 'public' ||
-          (!item.product.isInStock && !item.product.inventory.allowBackorder)) {
+          item.product.visibility !== 'public') {
         expiredItems.push(item);
       } else {
-        validItems.push(item);
+        // Stock yoxlaması - təhlükəsiz şəkildə
+        const hasStock = !item.product.inventory?.trackQuantity || 
+                        item.product.inventory?.stock >= item.quantity ||
+                        item.product.inventory?.allowBackorder;
+        
+        if (hasStock) {
+          validItems.push(item);
+        } else {
+          expiredItems.push(item);
+        }
       }
     });
 
     // Remove expired items if any
     if (expiredItems.length > 0) {
+      console.log(`🗑️ Removing ${expiredItems.length} expired items from cart`);
       cart.items = validItems;
       await cart.save();
     }
 
-    console.log(`✅ Səbət alındı: ${cart.summary.totalItems} məhsul - İstifadəçi: ${req.user.email}`);
+    console.log(`✅ Səbət alındı: ${cart.summary?.totalItems || cart.items.length} məhsul - İstifadəçi: ${req.user.email}`);
 
     res.status(200).json({
       success: true,
@@ -52,28 +88,31 @@ const getCart = asyncHandler(async (req, res) => {
           id: cart._id,
           items: cart.items,
           summary: cart.summary,
-          appliedCoupons: cart.appliedCoupons,
-          shippingInfo: cart.shippingInfo,
+          appliedCoupons: cart.appliedCoupons || [],
+          shippingInfo: cart.shippingInfo || {},
           status: cart.status,
           lastActivity: cart.lastActivity,
           expiresAt: cart.expiresAt
         },
         meta: {
-          isEmpty: cart.isEmpty,
-          itemCount: cart.itemCount,
+          isEmpty: cart.isEmpty || cart.items.length === 0,
+          itemCount: cart.items.length,
           hasExpiredItems: expiredItems.length > 0,
           expiredItemsCount: expiredItems.length,
-          uniqueVendors: cart.uniqueVendors.length
+          uniqueVendors: cart.uniqueVendors?.length || 0
         }
       },
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('Səbət alma xətası:', error);
+    console.error('❌ Səbət alma xətası:', error);
+    console.error('❌ Error stack:', error.stack);
+    
     return res.status(500).json({
       success: false,
       message: 'Səbət alınarkən xəta baş verdi',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       timestamp: new Date().toISOString()
     });
   }
@@ -83,6 +122,8 @@ const getCart = asyncHandler(async (req, res) => {
 // @route   POST /api/cart/add
 // @access  Private
 // ✅ FIXED addToCart function - Replace your existing addToCart with this:
+
+
 
 const addToCart = asyncHandler(async (req, res) => {
   // Validation check
@@ -450,43 +491,49 @@ const updateCartItem = asyncHandler(async (req, res) => {
 // @access  Private
 const clearCart = asyncHandler(async (req, res) => {
   try {
-    const cart = await Cart.findOne({ user: req.user.id, status: 'active' });
-    
-    if (!cart) {
-      return res.status(404).json({
-        success: false,
-        message: 'Səbət tapılmadı',
+    console.log(`🗑️ Clearing cart for user: ${req.user.email}`);
+
+    // İstifadəçinin aktiv cart-ını tap və sil
+    const result = await Cart.findOneAndDelete({ 
+      user: req.user.id,
+      status: 'active' 
+    });
+
+    if (!result) {
+      console.log(`ℹ️ No active cart found for user: ${req.user.email}`);
+      return res.status(200).json({
+        success: true,
+        message: 'Səbət artıq boşdur',
+        data: { 
+          cleared: false,
+          clearedItemsCount: 0
+        },
         timestamp: new Date().toISOString()
       });
     }
 
-    const itemCount = cart.summary.totalItems;
-    
-    await cart.clearCart();
+    const itemCount = result.items ? result.items.length : 0;
 
-    console.log(`✅ Səbət təmizləndi: ${itemCount} məhsul silindi - İstifadəçi: ${req.user.email}`);
+    console.log(`✅ Cart cleared successfully: ${result._id} - ${itemCount} items deleted - User: ${req.user.email}`);
 
     res.status(200).json({
       success: true,
       message: `Səbət təmizləndi (${itemCount} məhsul silindi)`,
       data: {
-        cart: {
-          id: cart._id,
-          summary: cart.summary,
-          totalItems: 0,
-          totalQuantity: 0,
-          total: 0
-        },
-        clearedItemsCount: itemCount
+        cleared: true,
+        clearedItemsCount: itemCount,
+        cartId: result._id
       },
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('Səbət təmizləmə xətası:', error);
-    return res.status(500).json({
+    console.error('❌ Clear cart error:', error);
+    
+    res.status(500).json({
       success: false,
       message: 'Səbət təmizlənərkən xəta baş verdi',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       timestamp: new Date().toISOString()
     });
   }

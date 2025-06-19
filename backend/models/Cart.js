@@ -408,6 +408,79 @@ cartSchema.methods.addItem = async function(productId, quantity = 1, variants = 
   return this.save();
 };
 
+cartSchema.statics.findOrCreateCart = async function(userId) {
+  console.log(`🔍 Finding or creating cart for user: ${userId}`);
+  
+  try {
+    // ÖNCƏLİKLƏ mövcud cart-ı yoxla
+    let cart = await this.findOne({ 
+      user: userId, 
+      status: 'active' 
+    });
+    
+    if (cart) {
+      console.log(`📦 Existing active cart found: ${cart._id}`);
+      return cart;
+    }
+
+    // Converted status-lu cart-ı da yoxla
+    const convertedCart = await this.findOne({ 
+      user: userId, 
+      status: 'converted' 
+    });
+    
+    if (convertedCart) {
+      console.log(`♻️ Converting old cart back to active: ${convertedCart._id}`);
+      convertedCart.status = 'active';
+      convertedCart.items = []; // Təmizlə
+      await convertedCart.save();
+      return convertedCart;
+    }
+
+    // Yeni cart yarat
+    console.log(`🆕 Creating new cart for user: ${userId}`);
+    cart = new this({
+      user: userId,
+      items: [],
+      status: 'active',
+      appliedCoupons: [],
+      notes: ''
+    });
+    
+    await cart.save();
+    console.log(`✅ New cart created: ${cart._id}`);
+    return cart;
+    
+  } catch (error) {
+    console.error(`❌ Error in findOrCreateCart:`, error);
+    
+    // Duplicate key error - demək ki mövcud cart var
+    if (error.code === 11000) {
+      console.log(`🔄 Duplicate key detected, fetching existing cart...`);
+      
+      // Mövcud cart-ı FORCE tap (status fərq etməz)
+      const existingCart = await this.findOne({ user: userId })
+        .sort({ updatedAt: -1 }); // Ən yenisini tap
+      
+      if (existingCart) {
+        console.log(`📦 Found existing cart: ${existingCart._id} (status: ${existingCart.status})`);
+        
+        // Statusu active et
+        if (existingCart.status !== 'active') {
+          existingCart.status = 'active';
+          existingCart.items = []; // Təmizlə
+          await existingCart.save();
+          console.log(`♻️ Cart reactivated: ${existingCart._id}`);
+        }
+        
+        return existingCart;
+      }
+    }
+    
+    throw error;
+  }
+};
+
 // Instance method - məhsul sil
 cartSchema.methods.removeItem = function(itemId) {
   this.items = this.items.filter(item => item._id.toString() !== itemId);
