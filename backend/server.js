@@ -17,10 +17,7 @@ const productRoutes = require('./routes/products');
 const cartRoutes = require('./routes/cart');
 const orderRoutes = require('./routes/orders');
 const reviewRoutes = require('./routes/review');
-// const userRoutes = require('./routes/users');
-// const vendorRoutes = require('./routes/vendors');
-// const categoryRoutes = require('./routes/categories');
-// const paymentRoutes = require('./routes/payments');
+const paymentRoutes = require('./routes/payments'); // 🆕 STRIPE PAYMENTS
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -91,6 +88,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// 🆕 Special handling for Stripe webhooks (must be before express.json())
+app.use('/api/payments/webhook', express.raw({type: 'application/json'}));
+
 // Body parsing middleware
 app.use(express.json({ 
   limit: process.env.MAX_FILE_SIZE || '10mb',
@@ -114,7 +114,11 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
-    version: process.env.npm_package_version || '1.0.0'
+    version: process.env.npm_package_version || '1.0.0',
+    stripe: {
+      configured: !!process.env.STRIPE_SECRET_KEY,
+      testMode: process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_') || false
+    }
   });
 });
 
@@ -131,7 +135,8 @@ app.get('/', (req, res) => {
       products: '/api/products',
       cart: '/api/cart',
       orders: '/api/orders',
-      reviews: '/api/reviews' // 🔥 YENİ: Review endpoint əlavə edildi
+      reviews: '/api/reviews',
+      payments: '/api/payments' // 🆕 PAYMENTS ENDPOINT
     }
   });
 });
@@ -141,11 +146,41 @@ app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
-app.use('/api/reviews', reviewRoutes); 
-// app.use('/api/users', userRoutes);
-// app.use('/api/vendors', vendorRoutes);
-// app.use('/api/categories', categoryRoutes);
-// app.use('/api/payments', paymentRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/payments', paymentRoutes); // 🆕 STRIPE PAYMENTS ROUTE
+
+// 🆕 Test Stripe Configuration
+app.get('/api/test-stripe', (req, res) => {
+  console.log('🔑 Stripe Configuration Test:');
+  console.log('  - Secret Key:', process.env.STRIPE_SECRET_KEY ? '✅ Loaded' : '❌ Missing');
+  console.log('  - Publishable Key:', process.env.STRIPE_PUBLISHABLE_KEY ? '✅ Loaded' : '❌ Missing');
+  console.log('  - Webhook Secret:', process.env.STRIPE_WEBHOOK_SECRET ? '✅ Loaded' : '❌ Missing');
+  
+  res.json({
+    success: true,
+    message: 'Stripe konfiqurasiya test',
+    stripe: {
+      secretKeyConfigured: !!process.env.STRIPE_SECRET_KEY,
+      secretKeyPrefix: process.env.STRIPE_SECRET_KEY ? 
+        process.env.STRIPE_SECRET_KEY.substring(0, 10) + '...' : 'Missing',
+      publishableKeyConfigured: !!process.env.STRIPE_PUBLISHABLE_KEY,
+      publishableKeyPrefix: process.env.STRIPE_PUBLISHABLE_KEY ? 
+        process.env.STRIPE_PUBLISHABLE_KEY.substring(0, 10) + '...' : 'Missing',
+      webhookSecretConfigured: !!process.env.STRIPE_WEBHOOK_SECRET,
+      testMode: process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_') || false
+    },
+    instructions: {
+      step1: 'GET /api/payments/test-config - Stripe test konfiqurasiyası',
+      step2: 'POST /api/payments/create-intent - Payment intent yaradın',
+      step3: 'Frontend-də test kartı 4242424242424242 istifadə edin',
+      testCards: {
+        success: '4242424242424242',
+        declined: '4000000000000002',
+        requiresAuth: '4000002760003184'
+      }
+    }
+  });
+});
 
 // Test route - database bağlantısını test et
 app.get('/api/test', async (req, res) => {
@@ -175,7 +210,6 @@ app.get('/api/test', async (req, res) => {
     });
   }
 });
-
 
 if (process.env.NODE_ENV === 'development') {
   app.get('/api/test/reviews-setup', async (req, res) => {
@@ -403,7 +437,7 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// 🔥 YENİ: Make vendor test endpoint
+// Make vendor test endpoint
 if (process.env.NODE_ENV === 'development') {
   app.post('/api/test/make-vendor', async (req, res) => {
     try {
@@ -510,7 +544,9 @@ const startServer = async () => {
       console.log(`🔗 API URL: http://localhost:${PORT}`);
       console.log(`📚 Health Check: http://localhost:${PORT}/health`);
       console.log(`🧪 Test Endpoint: http://localhost:${PORT}/api/test`);
-      console.log(`⭐ Review System: http://localhost:${PORT}/api/reviews/info/routes`); // 🔥 YENİ
+      console.log(`💳 Stripe Test: http://localhost:${PORT}/api/test-stripe`); // 🆕
+      console.log(`💰 Payment Config: http://localhost:${PORT}/api/payments/test-config`); // 🆕
+      console.log(`⭐ Review System: http://localhost:${PORT}/api/reviews/info/routes`);
       console.log('🚀================================🚀\n');
       
       if (process.env.NODE_ENV === 'development') {
@@ -518,8 +554,28 @@ const startServer = async () => {
         console.log('   - Postman və ya Thunder Client istifadə edin');
         console.log('   - .env faylını yoxlayın');
         console.log('   - MongoDB Atlas bağlantısını test edin');
-        console.log('   - Review API: GET /api/reviews/info/routes'); // 🔥 YENİ
-        console.log('   - Review test: GET /api/test/reviews-setup\n'); // 🔥 YENİ
+        console.log('   - Stripe konfiqurasiyası: GET /api/test-stripe'); // 🆕
+        console.log('   - Payment test: GET /api/payments/test-config'); // 🆕
+        console.log('   - Review API: GET /api/reviews/info/routes');
+        console.log('   - Review test: GET /api/test/reviews-setup\n');
+        
+        // 🆕 Stripe environment validation
+        console.log('🔑 Stripe Environment Check:');
+        console.log('   - Secret Key:', process.env.STRIPE_SECRET_KEY ? '✅ Configured' : '❌ Missing');
+        console.log('   - Publishable Key:', process.env.STRIPE_PUBLISHABLE_KEY ? '✅ Configured' : '❌ Missing');
+        console.log('   - Webhook Secret:', process.env.STRIPE_WEBHOOK_SECRET ? '✅ Configured' : '⚠️ Missing (Optional)');
+        
+        if (!process.env.STRIPE_SECRET_KEY) {
+          console.log('❌ STRIPE_SECRET_KEY missing in .env file!');
+          console.log('   Add: STRIPE_SECRET_KEY=sk_test_your_key_here');
+        }
+        
+        if (!process.env.STRIPE_PUBLISHABLE_KEY) {
+          console.log('❌ STRIPE_PUBLISHABLE_KEY missing in .env file!');
+          console.log('   Add: STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here');
+        }
+        
+        console.log('');
       }
     });
 

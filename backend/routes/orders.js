@@ -2,6 +2,7 @@ const express = require('express');
 const { body, param, query } = require('express-validator');
 const {
   createOrder,
+  createDirectOrder,
   getMyOrders,
   getOrder,
   cancelOrder,
@@ -271,6 +272,11 @@ router.use(protect);
 // @desc    Səbətdən sifariş yarat
 // @access  Private
 router.post('/', createOrderValidation, createOrder);
+
+// @route   POST /api/orders/direct
+// @desc    Birbaşa sifariş yarat (cart-siz, payment üçün)
+// @access  Private
+router.post('/direct', createDirectOrder);
 
 // @route   GET /api/orders
 // @desc    İstifadəçi sifarişlərini al

@@ -1355,8 +1355,218 @@ function getStatusDescription(status) {
   return descriptions[status] || status;
 }
 
+const createDirectOrder = asyncHandler(async (req, res) => {
+  try {
+    console.log('🚀 Direct Order Creation Started...');
+    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+    console.log('👤 User:', req.user.id, req.user.email);
+
+    const {
+      items,
+      pricing,
+      shippingAddress,
+      paymentMethod,
+      paymentInfo,
+      status = 'pending',
+      customerNotes,
+      specialInstructions
+    } = req.body;
+
+    // Validation
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return ApiResponse.error(res, "Items array is required", 400);
+    }
+
+    if (!pricing || !pricing.total) {
+      return ApiResponse.error(res, "Pricing information is required", 400);
+    }
+
+    if (!shippingAddress || !shippingAddress.firstName || !shippingAddress.lastName) {
+      return ApiResponse.error(res, "Complete shipping address is required", 400);
+    }
+
+    // Order number generate
+    const orderNumber = `ORD-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
+    
+    console.log(`📋 Generated order number: ${orderNumber}`);
+
+    // Vendor-lərə görə qruplaşdır (simplified version)
+    const vendorGroups = {};
+    
+    for (const item of items) {
+      // Default vendor ID (real product lookup lazım olsa əlavə edə bilərsiniz)
+      const vendorId = item.vendorId || req.user.id || '507f1f77bcf86cd799439011';
+      
+      if (!vendorGroups[vendorId]) {
+        vendorGroups[vendorId] = {
+          vendor: vendorId,
+          items: [],
+          subtotal: 0,
+        };
+      }
+
+      const itemData = {
+        product: item.product,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.unitPrice * item.quantity,
+        currency: 'AZN',
+        productSnapshot: item.productSnapshot || {
+          name: item.name || 'Product',
+          sku: item.sku || 'SKU001',
+          image: item.image || null,
+          brand: item.brand || 'Brand',
+          category: item.category || 'Category',
+        },
+        selectedVariants: [],
+        notes: '',
+        status: 'pending',
+      };
+
+      vendorGroups[vendorId].items.push(itemData);
+      vendorGroups[vendorId].subtotal += itemData.totalPrice;
+    }
+
+    // Vendor orders yaradın
+    const vendorOrders = Object.values(vendorGroups).map((group, index) => ({
+      vendor: group.vendor,
+      vendorOrderNumber: `${orderNumber}-${String.fromCharCode(65 + index)}`, // A, B, C...
+      items: group.items,
+      status: 'pending',
+      subtotal: group.subtotal,
+      tax: Math.round(group.subtotal * 0.18 * 100) / 100,
+      shipping: group.subtotal >= 100 ? 0 : 10,
+      total: 0, // Pre-save middleware-də hesablanacaq
+    }));
+
+    // 🔧 FIX ENUM VALUES - Model-in qəbul etdiyi qiymətlər
+    const validPaymentMethod = paymentMethod === 'card' ? 'credit_card' : 'cash_on_delivery';
+    const validStatus = status === 'paid' ? 'pending' : 'pending'; // Order status ümumiyyətlə pending başlayır
+    const validPaymentStatus = paymentInfo ? 'completed' : 'pending'; // Payment status
+
+    // Order data hazırla
+    const orderData = {
+      customer: req.user.id,
+      orderNumber: orderNumber,
+      vendorOrders,
+      status: validStatus, // ✅ Fixed: 'pending' instead of 'paid'
+      payment: {
+        method: validPaymentMethod, // ✅ Fixed: 'credit_card' instead of 'card'
+        status: validPaymentStatus, // ✅ Fixed: 'completed' instead of 'paid'
+        ...(paymentInfo && {
+          paymentIntentId: paymentInfo.paymentIntentId,
+          chargeId: paymentInfo.chargeId,
+          amount: paymentInfo.amount,
+          currency: paymentInfo.currency,
+          paidAt: paymentInfo.paidAt
+        })
+      },
+      shippingAddress: {
+        ...shippingAddress,
+        email: shippingAddress.email || req.user.email,
+      },
+      billingAddress: shippingAddress, // Same as shipping for now
+      pricing: {
+        subtotal: pricing.subtotal || 0,
+        tax: pricing.tax || 0,
+        shipping: pricing.shippingCost || 0,
+        discount: pricing.discountAmount || 0,
+        paymentFee: pricing.paymentFee || 0,
+        total: pricing.total || 0,
+        currency: "AZN",
+      },
+      appliedCoupons: [],
+      customerNotes: customerNotes || "",
+      specialInstructions: specialInstructions || {},
+      requestedDeliveryDate: null,
+      source: "web", // ✅ Fixed: 'web' instead of 'web_payment'
+      metadata: {
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+        deviceType: req.get("User-Agent")?.includes("Mobile") ? "mobile" : "desktop",
+        paymentProcessed: !!paymentInfo, // Custom field to track if payment was processed
+      },
+      placedAt: new Date(),
+    };
+
+    console.log(`💾 Creating direct order with data:`, {
+      orderNumber: orderData.orderNumber,
+      customer: req.user.email,
+      vendorOrdersCount: vendorOrders.length,
+      total: orderData.pricing.total,
+      paymentMethod: orderData.payment.method,
+      paymentStatus: orderData.payment.status,
+      orderStatus: orderData.status,
+      source: orderData.source
+    });
+
+    // Order yaradın
+    const order = new Order(orderData);
+    await order.save();
+
+    console.log(`✅ Direct order saved: ${order.orderNumber} - ID: ${order._id}`);
+
+    // İstifadəçi statistikasını yenilə
+    await User.findByIdAndUpdate(req.user.id, {
+      $inc: {
+        "stats.totalOrders": 1,
+        "stats.totalSpent": order.pricing.total,
+      },
+    });
+
+    // Populate order details
+    const populatedOrder = await Order.findById(order._id)
+      .populate("customer", "firstName lastName email phone")
+      .populate("vendorOrders.vendor", "firstName lastName businessName email")
+      .lean();
+
+    console.log(`✅ Direct order creation completed: ${order.orderNumber} - Customer: ${req.user.email} - Total: ${order.pricing.total} AZN`);
+
+    // Email notifications (async)
+    setTimeout(async () => {
+      try {
+        await emailService.sendOrderConfirmationEmail(populatedOrder);
+        console.log(`📧 Order confirmation email sent: ${populatedOrder.customer.email}`);
+      } catch (emailError) {
+        console.error("📧 Email sending error:", emailError.message);
+      }
+    }, 100);
+
+    // Response
+    return ApiResponse.success(
+      res,
+      {
+        order: {
+          id: populatedOrder._id,
+          orderNumber: populatedOrder.orderNumber,
+          status: populatedOrder.status,
+          vendorOrders: populatedOrder.vendorOrders,
+          pricing: populatedOrder.pricing,
+          shippingAddress: populatedOrder.shippingAddress,
+          payment: populatedOrder.payment,
+          placedAt: populatedOrder.placedAt,
+        },
+      },
+      "Sifariş uğurla yaradıldı",
+      201
+    );
+
+  } catch (error) {
+    console.error("❌ Direct order creation error:", error);
+    console.error("❌ Error stack:", error.stack);
+
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((err) => err.message);
+      return ApiResponse.error(res, "Məlumat doğrulaması uğursuz", 400, messages);
+    }
+
+    return ApiResponse.error(res, "Sifariş yaradılarkən xəta baş verdi", 500);
+  }
+});
+
 module.exports = {
   createOrder,
+  createDirectOrder,
   getMyOrders,
   getOrder,
   cancelOrder,

@@ -282,109 +282,126 @@ export const CartProvider = ({ children }) => {
 
   // Add to guest cart - NO TOAST HERE to prevent duplicates
   const addToGuestCart = (product, quantity, selectedVariants) => {
-    try {
-      const productId = product.id || product._id;
-      const existingItemIndex = cartItems.findIndex(
-        item => item.product.id === productId && 
-        JSON.stringify(item.selectedVariants || []) === JSON.stringify(selectedVariants)
-      );
+  try {
+    const productId = product.id || product._id;
+    const existingItemIndex = cartItems.findIndex(
+      item => item.product.id === productId && 
+      JSON.stringify(item.selectedVariants || []) === JSON.stringify(selectedVariants)
+    );
 
-      let updatedItems;
-      if (existingItemIndex > -1) {
-        // Update existing item
-        updatedItems = cartItems.map((item, index) => 
-          index === existingItemIndex 
-            ? { 
-                ...item, 
-                quantity: item.quantity + quantity,
-                totalPrice: (item.quantity + quantity) * item.unitPrice,
-                updatedAt: new Date().toISOString()
-              }
-            : item
-        );
+    // 🔧 FIX: Consistent price determination
+    const unitPrice = product.currentPrice || 
+                     product.pricing?.sellingPrice || 
+                     product.price || 
+                     0;
+
+    console.log(`💰 Adding to guest cart - Product: ${product.name}, UnitPrice: ${unitPrice}, Quantity: ${quantity}`);
+
+    let updatedItems;
+    if (existingItemIndex > -1) {
+      // Update existing item
+      updatedItems = cartItems.map((item, index) => 
+        index === existingItemIndex 
+          ? { 
+              ...item, 
+              quantity: item.quantity + quantity,
+              unitPrice: unitPrice, // 🔧 Ensure consistent unitPrice
+              totalPrice: (item.quantity + quantity) * unitPrice, // 🔧 Calculate from unitPrice
+              updatedAt: new Date().toISOString()
+            }
+          : item
+      );
+    } else {
+      // Add new item
+      const newItem = {
+        id: `guest_${Date.now()}_${Math.random()}`,
+        product: {
+          id: productId,
+          name: product.name,
+          image: product.image || product.images?.[0]?.url || product.images?.[0],
+          sku: product.sku,
+          vendor: product.vendor,
+          currentPrice: unitPrice // 🔧 Store consistent price in product too
+        },
+        quantity,
+        unitPrice: unitPrice, // 🔧 Consistent unitPrice
+        totalPrice: unitPrice * quantity, // 🔧 Calculate totalPrice
+        selectedVariants: selectedVariants || [],
+        addedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      updatedItems = [...cartItems, newItem];
+    }
+
+    setCartItems(updatedItems);
+    updateCartTotals(updatedItems);
+    saveGuestCartToStorage(updatedItems);
+    setLastUpdated(new Date());
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Guest cart add error:', error);
+    toastManager.actionError('Məhsul səbətə əlavə edilərkən xəta baş verdi');
+    return { success: false, error: error.message };
+  }
+};
+
+  // Update item quantity
+  const updateQuantity = async (itemId, newQuantity) => {
+  try {
+    if (newQuantity <= 0) {
+      return await removeFromCart(itemId);
+    }
+
+    setIsLoading(true);
+
+    if (isLoggedIn) {
+      // Use backend for authenticated users
+      const result = await cartService.updateCartItem(itemId, newQuantity);
+
+      if (result.success) {
+        await loadCartFromBackend();
+        return { success: true };
       } else {
-        // Add new item
-        const newItem = {
-          id: `guest_${Date.now()}_${Math.random()}`,
-          product: {
-            id: productId,
-            name: product.name,
-            image: product.image || product.images?.[0]?.url || product.images?.[0],
-            sku: product.sku,
-            vendor: product.vendor
-          },
-          quantity,
-          unitPrice: product.currentPrice || product.pricing?.sellingPrice || 0,
-          totalPrice: (product.currentPrice || product.pricing?.sellingPrice || 0) * quantity,
-          selectedVariants: selectedVariants || [],
-          addedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        updatedItems = [...cartItems, newItem];
+        return { success: false, error: result.error };
       }
+    } else {
+      // Handle guest cart locally
+      const updatedItems = cartItems.map(item => {
+        if (item.id === itemId) {
+          const unitPrice = item.unitPrice || 
+                           item.product?.currentPrice || 
+                           item.product?.pricing?.sellingPrice || 
+                           item.price || 
+                           0;
+          
+          console.log(`💰 Updating quantity - Item: ${item.product?.name}, UnitPrice: ${unitPrice}, NewQty: ${newQuantity}`);
+          
+          return {
+            ...item, 
+            quantity: newQuantity,
+            unitPrice: unitPrice, // 🔧 Ensure unitPrice consistency
+            totalPrice: newQuantity * unitPrice, // 🔧 Recalculate totalPrice
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return item;
+      });
 
       setCartItems(updatedItems);
       updateCartTotals(updatedItems);
       saveGuestCartToStorage(updatedItems);
       setLastUpdated(new Date());
       
-      // NO TOAST HERE - it's handled by the calling component
       return { success: true };
-    } catch (error) {
-      console.error('Guest cart add error:', error);
-      toastManager.actionError('Məhsul səbətə əlavə edilərkən xəta baş verdi');
-      return { success: false, error: error.message };
     }
-  };
-
-  // Update item quantity
-  const updateQuantity = async (itemId, newQuantity) => {
-    try {
-      if (newQuantity <= 0) {
-        return await removeFromCart(itemId);
-      }
-
-      setIsLoading(true);
-
-      if (isLoggedIn) {
-        // Use backend for authenticated users
-        const result = await cartService.updateCartItem(itemId, newQuantity);
-
-        if (result.success) {
-          await loadCartFromBackend();
-          return { success: true };
-        } else {
-          toastManager.actionError(result.error || 'Məhsul miqdarı yenilənərkən xəta baş verdi');
-          return { success: false, error: result.error };
-        }
-      } else {
-        // Handle guest cart locally
-        const updatedItems = cartItems.map(item => 
-          item.id === itemId 
-            ? { 
-                ...item, 
-                quantity: newQuantity,
-                totalPrice: newQuantity * item.unitPrice,
-                updatedAt: new Date().toISOString()
-              }
-            : item
-        );
-
-        setCartItems(updatedItems);
-        updateCartTotals(updatedItems);
-        saveGuestCartToStorage(updatedItems);
-        setLastUpdated(new Date());
-        
-        return { success: true };
-      }
-    } catch (error) {
-      console.error('Update quantity error:', error);
-      toastManager.actionError('Məhsul miqdarı yenilənərkən xəta baş verdi');
-      return { success: false, error: error.message };
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  } catch (error) {
+    console.error('Update quantity error:', error);
+    return { success: false, error: error.message };
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   // Remove item from cart
   const removeFromCart = async (itemId) => {
@@ -488,32 +505,55 @@ export const CartProvider = ({ children }) => {
 
   // Calculate cart totals
   const updateCartTotals = (items) => {
-    const itemCount = items.reduce((total, item) => total + (item.quantity || 0), 0);
-    const subtotal = items.reduce((total, item) => total + (item.totalPrice || 0), 0);
+  console.log('🧮 Calculating cart totals for items:', items);
+  
+  const itemCount = items.reduce((total, item) => total + (item.quantity || 0), 0);
+  
+  const subtotal = items.reduce((total, item) => {
+    const unitPrice = item.unitPrice || 
+                     item.product?.currentPrice || 
+                     item.product?.pricing?.sellingPrice || 
+                     item.price || 
+                     0;
     
-    // Shipping calculation (free over 50₼)
-    const shipping = subtotal > 50 ? 0 : (subtotal > 0 ? 5 : 0);
+    const quantity = item.quantity || 0;
+    const itemTotal = unitPrice * quantity;
     
-    // Tax calculation (18%)
-    const tax = subtotal * 0.18;
+    console.log(`📦 Item: ${item.product?.name || 'Unknown'}, UnitPrice: ${unitPrice}, Qty: ${quantity}, Total: ${itemTotal}`);
     
-    // Discount (would come from backend in real implementation)
-    const discount = 0;
-    
-    const total = subtotal + shipping + tax - discount;
+    return total + itemTotal;
+  }, 0);
+  
+  console.log('💰 Calculated subtotal:', subtotal);
+  
+  // Shipping calculation (free over 50₼)
+  const shipping = subtotal > 50 ? 0 : (subtotal > 0 ? 5 : 0);
+  
+  // 🔧 CRITICAL FIX: TAX calculation to match backend (18% VAT in Azerbaijan)
+  const taxRate = 0.18; // 18% VAT
+  const tax = subtotal * taxRate; // Tax hesablanır
+  
+  console.log(`💰 Tax calculation: ${subtotal} * ${taxRate} = ${tax}`);
+  
+  // Discount (would come from backend in real implementation)
+  const discount = 0;
+  
+  // 🔧 IMPORTANT: total = subtotal + shipping + tax
+  const total = subtotal + shipping + tax - discount;
 
-    const totals = {
-      itemCount,
-      subtotal: Number(subtotal.toFixed(2)),
-      shipping: Number(shipping.toFixed(2)),
-      tax: Number(tax.toFixed(2)),
-      discount: Number(discount.toFixed(2)),
-      total: Number(Math.max(0, total).toFixed(2))
-    };
-
-    setCartTotals(totals);
-    return totals;
+  const totals = {
+    itemCount,
+    subtotal: Number(subtotal.toFixed(2)),
+    shipping: Number(shipping.toFixed(2)),
+    tax: Number(tax.toFixed(2)), // Real tax amount
+    discount: Number(discount.toFixed(2)),
+    total: Number(Math.max(0, total).toFixed(2)) // With tax
   };
+
+  console.log('🧮 Final cart totals (WITH TAX):', totals);
+  setCartTotals(totals);
+  return totals;
+};
 
   // Check if product is in cart
   const isInCart = (productId, selectedVariants = []) => {
