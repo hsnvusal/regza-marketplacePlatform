@@ -411,6 +411,469 @@ class OrdersService {
     return this.getOrder(orderId);
   }
 
+  // 🔥 ORDER DETAIL METHODS - OrderDetailPage üçün lazım olan metodlar
+
+/**
+ * Get order tracking information
+ * @param {string} orderId - Order ID
+ * @returns {Promise<Object>} Tracking data
+ */
+async getOrderTracking(orderId) {
+  try {
+    console.log('🔄 Getting order tracking for:', orderId);
+    const response = await apiClient.get(`/orders/${orderId}/tracking`);
+    console.log('✅ Order tracking response:', response.data);
+    return {
+      success: true,
+      data: response.data
+    };
+  } catch (error) {
+    console.error('❌ Get order tracking error:', error);
+    return {
+      success: false,
+      error: error.response?.data?.message || 'İzləmə məlumatları alınarkən xəta baş verdi'
+    };
+  }
+}
+
+/**
+ * Update vendor order status
+ * @param {string} orderId - Order ID
+ * @param {Object} updateData - Status update data
+ * @returns {Promise<Object>} Update result
+ */
+async updateVendorOrderStatus(orderId, updateData) {
+  try {
+    console.log('🔄 Updating vendor order status:', { orderId, updateData });
+    const response = await apiClient.put(`/orders/${orderId}/vendor-status`, updateData);
+    console.log('✅ Vendor status updated:', response.data);
+    return {
+      success: true,
+      message: response.data.message || 'Status uğurla yeniləndi',
+      data: response.data
+    };
+  } catch (error) {
+    console.error('❌ Update vendor status error:', error);
+    return {
+      success: false,
+      error: error.response?.data?.message || 'Status yenilənərkən xəta baş verdi'
+    };
+  }
+}
+
+/**
+ * Update order status (admin only)
+ * @param {string} orderId - Order ID
+ * @param {string} status - New status
+ * @param {string} notes - Optional admin notes
+ * @returns {Promise<Object>} Update result
+ */
+async updateOrderStatus(orderId, status, notes = '') {
+  try {
+    console.log('🔄 Updating order status (admin):', { orderId, status, notes });
+    const response = await apiClient.put(`/orders/${orderId}/status`, {
+      status,
+      adminNotes: notes
+    });
+    console.log('✅ Order status updated:', response.data);
+    return {
+      success: true,
+      message: response.data.message || 'Status uğurla yeniləndi',
+      data: response.data
+    };
+  } catch (error) {
+    console.error('❌ Update order status error:', error);
+    return {
+      success: false,
+      error: error.response?.data?.message || 'Status yenilənərkən xəta baş verdi'
+    };
+  }
+}
+
+/**
+ * Add or update tracking information
+ * @param {string} orderId - Order ID
+ * @param {Object} trackingData - Tracking information
+ * @returns {Promise<Object>} Update result
+ */
+async updateTracking(orderId, trackingData) {
+  try {
+    console.log('🔄 Updating tracking information:', { orderId, trackingData });
+    const response = await apiClient.put(`/orders/${orderId}/tracking`, trackingData);
+    console.log('✅ Tracking updated:', response.data);
+    return {
+      success: true,
+      message: response.data.message || 'Tracking məlumatı əlavə edildi',
+      data: response.data
+    };
+  } catch (error) {
+    console.error('❌ Update tracking error:', error);
+    return {
+      success: false,
+      error: error.response?.data?.message || 'Tracking məlumatı əlavə edilərkən xəta baş verdi'
+    };
+  }
+}
+
+/**
+ * Update tracking status
+ * @param {string} orderId - Order ID
+ * @param {Object} statusData - Status update data
+ * @returns {Promise<Object>} Update result
+ */
+async updateTrackingStatus(orderId, statusData) {
+  try {
+    console.log('🔄 Updating tracking status:', { orderId, statusData });
+    const response = await apiClient.put(`/orders/${orderId}/tracking/status`, statusData);
+    console.log('✅ Tracking status updated:', response.data);
+    return {
+      success: true,
+      message: response.data.message || 'Tracking status yeniləndi',
+      data: response.data
+    };
+  } catch (error) {
+    console.error('❌ Update tracking status error:', error);
+    return {
+      success: false,
+      error: error.response?.data?.message || 'Tracking status yenilənərkən xəta baş verdi'
+    };
+  }
+}
+
+/**
+ * Track order by tracking number (public)
+ * @param {string} trackingNumber - Tracking number
+ * @returns {Promise<Object>} Tracking result
+ */
+async trackByNumber(trackingNumber) {
+  try {
+    console.log('🔄 Tracking by number:', trackingNumber);
+    const response = await apiClient.get(`/orders/track/${trackingNumber}`);
+    console.log('✅ Public tracking result:', response.data);
+    return {
+      success: true,
+      data: response.data
+    };
+  } catch (error) {
+    console.error('❌ Track by number error:', error);
+    return {
+      success: false,
+      error: error.response?.data?.message || 'Bu tracking nömrəsi ilə sifariş tapılmadı'
+    };
+  }
+}
+
+/**
+ * Get order statistics
+ * @returns {Promise<Object>} Order statistics
+ */
+async getOrderStats() {
+  try {
+    console.log('🔄 Getting order statistics');
+    const response = await apiClient.get('/orders/stats');
+    console.log('✅ Order stats:', response.data);
+    return {
+      success: true,
+      data: response.data
+    };
+  } catch (error) {
+    console.error('❌ Get order stats error:', error);
+    return {
+      success: false,
+      error: error.response?.data?.message || 'Statistika alınarkən xəta baş verdi'
+    };
+  }
+}
+
+/**
+ * Export orders to file
+ * @param {Object} filters - Export filters
+ * @param {string} format - Export format (xlsx, csv, pdf)
+ * @returns {Promise<Object>} Export result
+ */
+async exportOrders(filters = {}, format = 'xlsx') {
+  try {
+    console.log('🔄 Exporting orders:', { filters, format });
+    
+    const params = new URLSearchParams({
+      format,
+      ...filters
+    });
+
+    // Remove empty filters
+    for (const [key, value] of params.entries()) {
+      if (!value || value === '') {
+        params.delete(key);
+      }
+    }
+    
+    const response = await apiClient.get(`/orders/export?${params.toString()}`, {
+      responseType: 'blob'
+    });
+    
+    // Create download link
+    const blob = new Blob([response.data], {
+      type: response.headers['content-type']
+    });
+    
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Get filename from response headers or create default
+    const contentDisposition = response.headers['content-disposition'];
+    let filename = `orders_${new Date().toISOString().split('T')[0]}.${format}`;
+    
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+      if (filenameMatch) {
+        filename = filenameMatch[1];
+      }
+    }
+    
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    console.log('✅ Orders exported successfully');
+    return {
+      success: true,
+      message: 'Sifarişlər uğurla ixrac edildi'
+    };
+    
+  } catch (error) {
+    console.error('❌ Export orders error:', error);
+    return {
+      success: false,
+      error: error.response?.data?.message || 'İxrac edilərkən xəta baş verdi'
+    };
+  }
+}
+
+// 🔥 UTILITY METHODS - Helper functions
+
+/**
+ * Format price with currency
+ * @param {number} price - Price amount
+ * @param {string} currency - Currency code
+ * @returns {string} Formatted price
+ */
+formatPrice(price, currency = 'AZN') {
+  if (price === null || price === undefined) return '0 ' + currency;
+  return new Intl.NumberFormat('az-AZ').format(price) + ' ' + currency;
+}
+
+/**
+ * Format date for display
+ * @param {string|Date} dateString - Date to format
+ * @param {Object} options - Formatting options
+ * @returns {string} Formatted date
+ */
+formatDate(dateString, options = {}) {
+  if (!dateString) return 'Naməlum';
+  
+  const defaultOptions = {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  };
+  
+  return new Date(dateString).toLocaleDateString('az-AZ', {
+    ...defaultOptions,
+    ...options
+  });
+}
+
+/**
+ * Get payment method text in Azerbaijani
+ * @param {string} method - Payment method code
+ * @returns {string} Payment method text
+ */
+getPaymentMethodText(method) {
+  const methods = {
+    credit_card: 'Kredit kartı',
+    debit_card: 'Debet kartı',
+    paypal: 'PayPal',
+    bank_transfer: 'Bank köçürməsi',
+    cash_on_delivery: 'Çatdırılma zamanı ödəniş',
+    crypto: 'Kriptovalyuta'
+  };
+  return methods[method] || method;
+}
+
+/**
+ * Get payment status text in Azerbaijani
+ * @param {string} status - Payment status code
+ * @returns {string} Payment status text
+ */
+getPaymentStatusText(status) {
+  const statuses = {
+    pending: 'Gözləyir',
+    processing: 'İşlənir',
+    completed: 'Tamamlandı',
+    failed: 'Uğursuz',
+    refunded: 'Geri qaytarıldı',
+    partially_refunded: 'Qismən geri qaytarıldı'
+  };
+  return statuses[status] || status;
+}
+
+/**
+ * Get carrier text in Azerbaijani
+ * @param {string} carrier - Carrier code
+ * @returns {string} Carrier text
+ */
+getCarrierText(carrier) {
+  const carriers = {
+    azerpost: 'Azərpoçt',
+    bravo: 'Bravo Express',
+    express: 'Express Post',
+    pickup: 'Özü götürmə',
+    other: 'Digər'
+  };
+  return carriers[carrier] || carrier;
+}
+
+/**
+ * Get tracking status text in Azerbaijani
+ * @param {string} status - Tracking status code
+ * @returns {string} Tracking status text
+ */
+getTrackingStatusText(status) {
+  const statuses = {
+    shipped: 'Göndərildi',
+    in_transit: 'Yoldadır',
+    out_for_delivery: 'Çatdırılma üçün yolda',
+    delivered: 'Çatdırıldı',
+    failed_delivery: 'Çatdırılma uğursuz',
+    returned: 'Geri qaytarıldı'
+  };
+  return statuses[status] || status;
+}
+
+/**
+ * Check if order can be cancelled
+ * @param {Object} order - Order object
+ * @param {Object} user - Current user
+ * @returns {boolean} Can cancel
+ */
+canCancelOrder(order, user) {
+  return user?.role === 'customer' && 
+         ['pending', 'confirmed'].includes(order?.status);
+}
+
+/**
+ * Check if order status can be updated
+ * @param {Object} order - Order object
+ * @param {Object} user - Current user
+ * @returns {boolean} Can update status
+ */
+canUpdateStatus(order, user) {
+  return (user?.role === 'admin' || user?.role === 'vendor') &&
+         !['completed', 'cancelled', 'refunded'].includes(order?.status);
+}
+
+/**
+ * Get available statuses for user role
+ * @param {string} userRole - User role
+ * @returns {Array} Available statuses
+ */
+getAvailableStatuses(userRole) {
+  const allStatuses = this.getOrderStatuses();
+  
+  if (userRole === 'vendor') {
+    return allStatuses.filter(status => 
+      ['confirmed', 'processing', 'shipped', 'delivered'].includes(status.value)
+    );
+  }
+  
+  return allStatuses; // Admin sees all statuses
+}
+
+/**
+ * Validate order data before submission
+ * @param {Object} orderData - Order data to validate
+ * @returns {Object} Validation result
+ */
+validateOrderData(orderData) {
+  const errors = [];
+  
+  if (!orderData.items || !Array.isArray(orderData.items) || orderData.items.length === 0) {
+    errors.push('Məhsul siyahısı boş ola bilməz');
+  }
+  
+  if (!orderData.shippingAddress) {
+    errors.push('Çatdırılma ünvanı tələb olunur');
+  } else {
+    if (!orderData.shippingAddress.firstName) errors.push('Ad tələb olunur');
+    if (!orderData.shippingAddress.lastName) errors.push('Soyad tələb olunur');
+    if (!orderData.shippingAddress.email) errors.push('Email tələb olunur');
+  }
+  
+  if (!orderData.pricing || !orderData.pricing.total) {
+    errors.push('Məbləğ məlumatı tələb olunur');
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+// 🔥 DEBUG HELPERS - Development üçün
+
+/**
+ * Debug order data
+ * @param {Object} order - Order to debug
+ */
+debugOrder(order) {
+  console.group('🐛 Order Debug Info');
+  console.log('Order ID:', order?._id || order?.id);
+  console.log('Order Number:', order?.orderNumber);
+  console.log('Status:', order?.status);
+  console.log('Customer:', order?.customer);
+  console.log('Vendor Orders:', order?.vendorOrders?.length);
+  console.log('Total Amount:', this.formatPrice(order?.pricing?.total));
+  console.log('Payment Method:', order?.payment?.method);
+  console.log('Payment Status:', order?.payment?.status);
+  console.log('Tracking Info:', order?.tracking || 'No tracking');
+  console.log('Full Order:', order);
+  console.groupEnd();
+}
+
+/**
+ * Test API endpoints
+ */
+async runDiagnostics() {
+  console.group('🔧 Orders Service Diagnostics');
+  
+  try {
+    // Test connection
+    console.log('1. Testing API connection...');
+    const connectionTest = await this.testConnection();
+    console.log('   Connection:', connectionTest.success ? '✅' : '❌');
+    
+    // Test orders endpoint
+    console.log('2. Testing orders endpoint...');
+    const ordersTest = await this.getMyOrders(1, 5);
+    console.log('   Orders API:', ordersTest.success ? '✅' : '❌');
+    
+    // Test order stats
+    console.log('3. Testing order stats...');
+    const statsTest = await this.getOrderStats();
+    console.log('   Stats API:', statsTest.success ? '✅' : '❌');
+    
+  } catch (error) {
+    console.error('Diagnostics failed:', error);
+  }
+  
+  console.groupEnd();
+}
+
   // Sifarişi ləğv et
   async cancelOrder(orderId, reason = '') {
     try {

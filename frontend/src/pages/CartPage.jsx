@@ -705,9 +705,11 @@ const CartPage = () => {
     </div>
     <div className="option-description">{method.description}</div>
   </div>
+  {method.fee > 0 && (
   <div className="option-price">
-    {method.fee > 0 ? `+${method.fee.toFixed(2)} AZN` : 'Pulsuz'}
+    +{method.fee.toFixed(2)} AZN
   </div>
+)}
 </label>
               ))}
             </div>

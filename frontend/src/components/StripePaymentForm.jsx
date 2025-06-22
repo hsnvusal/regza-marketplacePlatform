@@ -258,14 +258,14 @@ const StripePaymentForm = ({
         <div className="accepted-cards">
           Qəbul edilən kartlar: Visa, Mastercard, Amex
         </div>
-        <div className="test-card-info" style={{ 
+        {/* <div className="test-card-info" style={{ 
           marginTop: '8px', 
           fontSize: '12px', 
           color: '#666',
           textAlign: 'center'
         }}>
           Test kartı: 4242 4242 4242 4242 | CVC: 123 | Tarix: 12/25
-        </div>
+        </div> */}
       </div>
     </div>
   );

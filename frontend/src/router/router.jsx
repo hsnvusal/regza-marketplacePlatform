@@ -7,6 +7,7 @@ import ProductsPage from '../pages/ProductsPage'
 import ProductDetailPage from '../pages/ProductDetailPage'
 import CartPage from '../pages/CartPage'
 import OrdersPage from '../pages/OrdersPage'
+import OrderDetailsPage from '../pages/OrderDetailsPage'
 import OrderTrackingPage from '../pages/OrderTrackingPage'
 import LoginPage from '../pages/LoginPage'
 import RegisterPage from '../pages/RegisterPage'
@@ -110,7 +111,17 @@ const Router = () => {
           }
          />
         
-        {/* 🔥 ORDER TRACKING ROUTE - ƏLAVƏ EDİLDİ */}
+        {/* 🔥 ORDER DETAIL ROUTE - orders/:orderId (tracking-dən əvvəl) */}
+        <Route 
+          path='/orders/:orderId'
+          element={
+            <ProtectedRoute>
+              <OrderDetailsPage />
+            </ProtectedRoute>
+          }
+         />
+        
+        {/* 🔥 ORDER TRACKING ROUTE - orders/:orderId/tracking (daha spesifik) */}
         <Route 
           path='/orders/:orderId/tracking'
           element={
