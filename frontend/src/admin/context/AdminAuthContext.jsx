@@ -1,3 +1,4 @@
+// src/admin/context/AdminAuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import adminAuthService from '../services/adminAuthService';
 
@@ -25,16 +26,21 @@ export const AdminAuthProvider = ({ children }) => {
     try {
       const token = localStorage.getItem('adminToken');
       if (token) {
+        console.log('🔍 AdminAuth: Checking token validity...');
         const response = await adminAuthService.verifyToken();
         if (response.success && response.admin) {
+          console.log('✅ AdminAuth: Token valid, admin authenticated');
           setAdmin(response.admin);
           setIsAuthenticated(true);
         } else {
+          console.log('❌ AdminAuth: Token invalid, clearing auth');
           logout();
         }
+      } else {
+        console.log('⚠️ AdminAuth: No token found');
       }
     } catch (error) {
-      console.error('Admin auth check failed:', error);
+      console.error('❌ AdminAuth: Auth check failed:', error);
       logout();
     } finally {
       setIsLoading(false);
@@ -43,21 +49,26 @@ export const AdminAuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     try {
+      console.log('🔄 AdminAuth: Attempting login...');
       const response = await adminAuthService.login(credentials);
       if (response.success) {
+        console.log('✅ AdminAuth: Login successful');
         localStorage.setItem('adminToken', response.token);
         setAdmin(response.admin);
         setIsAuthenticated(true);
         return { success: true };
       }
+      console.log('❌ AdminAuth: Login failed:', response.error);
       return { success: false, error: response.error };
     } catch (error) {
-      console.error('Admin login failed:', error);
+      console.error('❌ AdminAuth: Login error:', error);
       return { success: false, error: 'Giriş zamanı xəta baş verdi' };
     }
   };
 
   const logout = () => {
+    console.log('🚪 AdminAuth: Logging out...');
+    adminAuthService.logout();
     localStorage.removeItem('adminToken');
     setAdmin(null);
     setIsAuthenticated(false);

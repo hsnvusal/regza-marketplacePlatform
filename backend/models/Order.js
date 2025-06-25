@@ -490,15 +490,36 @@ const orderSchema = new mongoose.Schema({
 
 // Virtual fields
 orderSchema.virtual('totalItems').get(function() {
+  // Safety check - vendorOrders array-i mövcud olub-olmadığını yoxlayırıq
+  if (!this.vendorOrders || !Array.isArray(this.vendorOrders)) {
+    return 0;
+  }
+  
   return this.vendorOrders.reduce((total, vendorOrder) => {
+    // Hər vendorOrder üçün də items array-i yoxlayırıq
+    if (!vendorOrder.items || !Array.isArray(vendorOrder.items)) {
+      return total;
+    }
     return total + vendorOrder.items.length;
   }, 0);
 });
 
+
 orderSchema.virtual('totalQuantity').get(function() {
+  // Safety check - vendorOrders array-i mövcud olub-olmadığını yoxlayırıq
+  if (!this.vendorOrders || !Array.isArray(this.vendorOrders)) {
+    return 0;
+  }
+  
   return this.vendorOrders.reduce((total, vendorOrder) => {
+    // Hər vendorOrder üçün də items array-i yoxlayırıq
+    if (!vendorOrder.items || !Array.isArray(vendorOrder.items)) {
+      return total;
+    }
     return total + vendorOrder.items.reduce((itemTotal, item) => {
-      return itemTotal + item.quantity;
+      // Hər item üçün quantity yoxlaması
+      const quantity = item?.quantity || 0;
+      return itemTotal + quantity;
     }, 0);
   }, 0);
 });
@@ -512,22 +533,128 @@ orderSchema.virtual('canBeCancelled').get(function() {
 });
 
 orderSchema.virtual('daysSinceOrdered').get(function() {
-  return Math.floor((Date.now() - this.placedAt) / (1000 * 60 * 60 * 24));
+  const placedAt = this.placedAt || new Date();
+  return Math.floor((Date.now() - placedAt) / (1000 * 60 * 60 * 24));
 });
 
 orderSchema.virtual('estimatedDelivery').get(function() {
-  // En geç təhvil tarixini qaytarır
-  const deliveryDates = this.vendorOrders
-    .map(vo => vo.tracking?.estimatedDelivery)
-    .filter(date => date);
+  // En geç təhvil tarixini qaytarır - safety check ilə
+  const deliveryDates = [];
   
-  if (this.tracking?.estimatedDelivery) {
+  // VendorOrders-dan delivery dates topla
+  if (this.vendorOrders && Array.isArray(this.vendorOrders)) {
+    this.vendorOrders.forEach(vo => {
+      if (vo.tracking && vo.tracking.estimatedDelivery) {
+        deliveryDates.push(vo.tracking.estimatedDelivery);
+      }
+    });
+  }
+  
+  // Main tracking-dən delivery date əlavə et
+  if (this.tracking && this.tracking.estimatedDelivery) {
     deliveryDates.push(this.tracking.estimatedDelivery);
   }
   
   return deliveryDates.length > 0 ? new Date(Math.max(...deliveryDates)) : null;
 });
 
+// Əlavə virtual field - total amount hesablaması
+orderSchema.virtual('totalAmount').get(function() {
+  // Pricing object-indən total götür
+  if (this.pricing && typeof this.pricing.total === 'number') {
+    return this.pricing.total;
+  }
+  
+  // Əgər pricing yoxdursa vendor orders-dan hesabla
+  if (!this.vendorOrders || !Array.isArray(this.vendorOrders)) {
+    return 0;
+  }
+  
+  return this.vendorOrders.reduce((total, vendorOrder) => {
+    const vendorTotal = vendorOrder?.total || 0;
+    return total + vendorTotal;
+  }, 0);
+});
+
+// Virtual field - vendor sayı
+orderSchema.virtual('vendorCount').get(function() {
+  if (!this.vendorOrders || !Array.isArray(this.vendorOrders)) {
+    return 0;
+  }
+  return this.vendorOrders.length;
+});
+
+orderSchema.set('toJSON', { 
+  virtuals: true,
+  transform: function(doc, ret) {
+    // Safety checks
+    if (!ret.vendorOrders) {
+      ret.vendorOrders = [];
+    }
+    
+    // Hər vendorOrder üçün items yoxlaması
+    if (Array.isArray(ret.vendorOrders)) {
+      ret.vendorOrders.forEach(vo => {
+        if (!vo.items) {
+          vo.items = [];
+        }
+      });
+    }
+    
+    // Pricing object yoxlaması
+    if (!ret.pricing) {
+      ret.pricing = {
+        subtotal: 0,
+        tax: 0,
+        shipping: 0,
+        discount: 0,
+        total: 0,
+        currency: 'AZN'
+      };
+    }
+    
+    ret.id = ret._id;
+    delete ret._id;
+    delete ret.__v;
+    return ret;
+  }
+});
+
+orderSchema.set('toObject', { 
+  virtuals: true,
+  transform: function(doc, ret) {
+    // Safety checks
+    if (!ret.vendorOrders) {
+      ret.vendorOrders = [];
+    }
+    
+    // Hər vendorOrder üçün items yoxlaması
+    if (Array.isArray(ret.vendorOrders)) {
+      ret.vendorOrders.forEach(vo => {
+        if (!vo.items) {
+          vo.items = [];
+        }
+      });
+    }
+    
+    // Pricing object yoxlaması
+    if (!ret.pricing) {
+      ret.pricing = {
+        subtotal: 0,
+        tax: 0,
+        shipping: 0,
+        discount: 0,
+        total: 0,
+        currency: 'AZN'
+      };
+    }
+    
+    ret.id = ret._id;
+    delete ret._id;
+    delete ret.__v;
+    return ret;
+  }
+});
 // Indexes
 orderSchema.index({ orderNumber: 1 });
 orderSchema.index({ customer: 1 });

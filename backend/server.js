@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
+
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
@@ -18,6 +19,7 @@ const cartRoutes = require('./routes/cart');
 const orderRoutes = require('./routes/orders');
 const reviewRoutes = require('./routes/review');
 const paymentRoutes = require('./routes/payments'); // 🆕 STRIPE PAYMENTS
+const adminRoutes = require('./routes/admin'); // 🆕 ADMIN ROUTES
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -148,6 +150,7 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/payments', paymentRoutes); // 🆕 STRIPE PAYMENTS ROUTE
+app.use('/api/admin', adminRoutes); // 🆕 ADMIN ROUTES
 
 // 🆕 Test Stripe Configuration
 app.get('/api/test-stripe', (req, res) => {
@@ -489,6 +492,148 @@ if (process.env.NODE_ENV === 'development') {
       });
     }
   });
+}
+
+// ===== ADMIN EMAIL NOTIFICATION SYSTEM =====
+if (process.env.NODE_ENV === 'development' && process.env.ENABLE_ADMIN_NOTIFICATIONS === 'true') {
+  
+  let emailTransporter = null;
+
+  // Email transporter yaradın
+  const initEmailService = async () => {
+    try {
+      const nodemailer = require('nodemailer');
+      
+      emailTransporter = nodemailer.createTransporter({
+        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        }
+      });
+
+      // Test connection
+      await emailTransporter.verify();
+      console.log('✅ Admin email service ready');
+      return true;
+    } catch (error) {
+      console.error('❌ Admin email service failed:', error.message);
+      return false;
+    }
+  };
+
+  // Email göndərmə funksionu
+  const sendAdminEmail = async (to, subject, html) => {
+    if (!emailTransporter) {
+      return { success: false, error: 'Email service not ready' };
+    }
+
+    try {
+      const result = await emailTransporter.sendMail({
+        from: {
+          name: process.env.EMAIL_FROM_NAME || 'RegzaAPP',
+          address: process.env.EMAIL_FROM
+        },
+        to,
+        subject,
+        html
+      });
+
+      console.log('✅ Admin email sent:', result.messageId);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ Admin email failed:', error.message);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Email servisini başlat
+  initEmailService();
+
+  // ===== TEST ENDPOINTS =====
+  
+  // Simple ping
+  app.get('/api/admin/test/ping', (req, res) => {
+    res.json({
+      success: true,
+      message: 'Admin endpoints işləyir!',
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // Test email
+  app.post('/api/admin/test/email', async (req, res) => {
+    try {
+      const email = req.body.email || process.env.ADMIN_EMAIL;
+      
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email tələb olunur'
+        });
+      }
+
+      const html = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; border: 2px solid #4299e1; border-radius: 8px; max-width: 600px;">
+          <h2 style="color: #2d3748; text-align: center;">✅ Admin Test Email</h2>
+          <div style="background: #f7fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>📅 Tarix:</strong> ${new Date().toLocaleString('az-AZ')}</p>
+            <p><strong>📧 Göndərici:</strong> ${process.env.EMAIL_FROM}</p>
+            <p><strong>📧 Alıcı:</strong> ${email}</p>
+          </div>
+          <div style="background: #e6fffa; padding: 15px; border-radius: 8px;">
+            <p style="margin: 0; color: #234e52;">🎉 RegzaAPP Admin email sistemi işləyir!</p>
+          </div>
+        </div>
+      `;
+
+      const result = await sendAdminEmail(email, '✅ Admin Test - RegzaAPP', html);
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          message: `Email ${email} ünvanına göndərildi`,
+          messageId: result.messageId
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: 'Email göndərilmədi',
+          error: result.error
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Test email error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  // Email konfigurasiya
+  app.get('/api/admin/test/config', (req, res) => {
+    res.json({
+      success: true,
+      config: {
+        emailUser: process.env.EMAIL_USER ? process.env.EMAIL_USER.substring(0, 5) + '***' : 'NOT_SET',
+        emailPass: process.env.EMAIL_PASS ? 'SET' : 'NOT_SET',
+        emailFrom: process.env.EMAIL_FROM || 'NOT_SET',
+        adminEmail: process.env.ADMIN_EMAIL || 'NOT_SET',
+        notifications: process.env.ENABLE_ADMIN_NOTIFICATIONS,
+        transporterReady: !!emailTransporter
+      }
+    });
+  });
+
+  console.log('🧪 Admin test endpoints loaded:');
+  console.log('   GET  /api/admin/test/ping');
+  console.log('   GET  /api/admin/test/config');
+  console.log('   POST /api/admin/test/email');
 }
 
 // Error handling middleware

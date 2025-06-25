@@ -1,103 +1,184 @@
+// src/admin/components/AdminSidebar.jsx
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import { useAdminAuth } from '../context/AdminAuthContext';
+import { Link, useLocation } from 'react-router-dom';
 
-const AdminSidebar = () => {
-  const { admin, logout } = useAdminAuth();
+const AdminSidebar = ({ isOpen }) => {
+  // useLocation hook-u ilə path-i birbaşa götürürük
   const location = useLocation();
+  const currentPath = location.pathname || '/admin/dashboard';
+
+  // Debug üçün
+  console.log('🔍 AdminSidebar Debug:', {
+    isOpen,
+    currentPath,
+    location: location
+  });
 
   const menuItems = [
     {
-      path: '/dashboard',
-      icon: '📊',
+      id: 'dashboard',
       label: 'Dashboard',
-      description: 'Ümumi məlumatlar'
+      icon: '📊',
+      path: '/admin/dashboard',
+      description: 'Ümumi baxış və statistika'
     },
     {
-      path: '/orders',
-      icon: '📋',
+      id: 'orders',
       label: 'Sifarişlər',
-      description: 'Bütün sifarişlər'
+      icon: '📋',
+      path: '/admin/orders',
+      description: 'Sifariş idarəetməsi',
+      submenu: [
+        { label: 'Bütün sifarişlər', path: '/admin/orders' },
+        { label: 'Gözləyən sifarişlər', path: '/admin/orders?status=pending' },
+        { label: 'Hazırlanan sifarişlər', path: '/admin/orders?status=processing' }
+      ]
     },
     {
-      path: '/products',
-      icon: '📦',
+      id: 'products',
       label: 'Məhsullar',
-      description: 'Məhsul idarəetməsi'
+      icon: '📦',
+      path: '/admin/products',
+      description: 'Məhsul kataloqu idarəetməsi',
+      submenu: [
+        { label: 'Bütün məhsullar', path: '/admin/products' },
+        { label: 'Yeni məhsul əlavə et', path: '/admin/products/new' },
+        { label: 'Kateqoriyalar', path: '/admin/categories' },
+        { label: 'Stok idarəetməsi', path: '/admin/inventory' }
+      ]
     },
     {
-      path: '/vendors',
-      icon: '🏪',
-      label: 'Satıcılar',
-      description: 'Vendor idarəetməsi'
-    },
-    {
-      path: '/customers',
+      id: 'users',
+      label: 'İstifadəçilər',
       icon: '👥',
-      label: 'Müştərilər',
-      description: 'Müştəri məlumatları'
+      path: '/admin/users',
+      description: 'İstifadəçi və rol idarəetməsi',
+      submenu: [
+        { label: 'Bütün istifadəçilər', path: '/admin/users' },
+        { label: 'Müştərilər', path: '/admin/customers' },
+        { label: 'Satıcılar', path: '/admin/vendors' },
+        { label: 'Adminlər', path: '/admin/admins' }
+      ]
     },
     {
-      path: '/reports',
-      icon: '📈',
+      id: 'vendors',
+      label: 'Satıcılar',
+      icon: '🏪',
+      path: '/admin/vendors',
+      description: 'Satıcı hesabları və təsdiqlər'
+    },
+    {
+      id: 'reports',
       label: 'Hesabatlar',
-      description: 'Analitika və hesabatlar'
+      icon: '📈',
+      path: '/admin/reports',
+      description: 'Analitika və hesabatlar',
+      submenu: [
+        { label: 'Satış hesabatı', path: '/admin/reports/sales' },
+        { label: 'Məhsul analitikası', path: '/admin/reports/products' },
+        { label: 'İstifadəçi analitikası', path: '/admin/reports/users' }
+      ]
     },
     {
-      path: '/settings',
-      icon: '⚙️',
+      id: 'settings',
       label: 'Tənzimləmələr',
-      description: 'Sistem tənzimləmələri'
+      icon: '⚙️',
+      path: '/admin/settings',
+      description: 'Sistem tənzimləmələri',
+      submenu: [
+        { label: 'Ümumi tənzimləmələr', path: '/admin/settings/general' },
+        { label: 'Ödəniş tənzimləmələri', path: '/admin/settings/payments' },
+        { label: 'Email tənzimləmələri', path: '/admin/settings/email' }
+      ]
     }
   ];
 
+  const isActiveLink = (path) => {
+    // Safety check - əgər currentPath yoxdursa false qaytar
+    if (!currentPath || typeof currentPath !== 'string') {
+      return false;
+    }
+    
+    if (path === '/admin/dashboard') {
+      return currentPath === path;
+    }
+    
+    // StartsWith method-unu safely istifadə et
+    try {
+      return currentPath.startsWith(path);
+    } catch (error) {
+      console.error('isActiveLink error:', error);
+      return false;
+    }
+  };
+
+  console.log('🔍 AdminSidebar currentPath:', currentPath);
+
   return (
-    <div className="admin-sidebar">
-      <div className="sidebar-header">
-        <div className="admin-logo">
-          <span className="logo-icon">⚡</span>
-          <span className="logo-text">Admin Panel</span>
-        </div>
-        <div className="admin-info">
-          <div className="admin-avatar">
-            {admin?.firstName?.charAt(0) || 'A'}
-          </div>
-          <div className="admin-details">
-            <span className="admin-name">
-              {admin?.firstName} {admin?.lastName}
-            </span>
-            <span className="admin-role">Administrator</span>
-          </div>
-        </div>
-      </div>
+    <aside className={`admin-sidebar ${isOpen ? 'open' : 'closed'}`}>
+      <div className="sidebar-content">
+        {/* Main Navigation */}
+        <nav className="sidebar-nav">
+          {menuItems.map((item) => {
+            const isActive = isActiveLink(item.path);
+            
+            return (
+              <div key={item.id} className="nav-group">
+                <Link
+                  to={item.path}
+                  className={`nav-item ${isActive ? 'active' : ''}`}
+                  title={!isOpen ? item.label : ''}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  {isOpen && (
+                    <div className="nav-content">
+                      <span className="nav-label">{item.label}</span>
+                      <span className="nav-description">{item.description}</span>
+                    </div>
+                  )}
+                </Link>
 
-      <nav className="sidebar-nav">
-        <ul>
-          {menuItems.map((item) => (
-            <li key={item.path}>
-              <NavLink
-                to={item.path}
-                className={({ isActive }) => 
-                  `nav-link ${isActive ? 'active' : ''}`
-                }
-              >
-                <span className="nav-icon">{item.icon}</span>
-                <div className="nav-content">
-                  <span className="nav-label">{item.label}</span>
-                  <span className="nav-description">{item.description}</span>
-                </div>
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-      </nav>
+                {/* Submenu - only show if sidebar is open and current item is active */}
+                {isOpen && item.submenu && isActive && (
+                  <div className="nav-submenu">
+                    {item.submenu.map((subItem, index) => (
+                      <Link
+                        key={index}
+                        to={subItem.path}
+                        className={`nav-subitem ${currentPath === subItem.path ? 'active' : ''}`}
+                      >
+                        <span className="subitem-dot">•</span>
+                        <span className="subitem-label">{subItem.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
 
-      <div className="sidebar-footer">
-        <button onClick={logout} className="logout-btn">
-          🚪 Çıxış
-        </button>
+        {/* Sidebar Footer */}
+        {isOpen && (
+          <div className="sidebar-footer">
+            <div className="footer-info">
+              <div className="app-version">
+                <span className="version-label">RegzaAPP Admin</span>
+                <span className="version-number">v1.0.0</span>
+              </div>
+              <div className="footer-links">
+                <a href="/admin/help" className="footer-link">
+                  ❓ Kömək
+                </a>
+                <a href="/admin/documentation" className="footer-link">
+                  📚 Sənədlər
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </aside>
   );
 };
 

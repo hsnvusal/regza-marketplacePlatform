@@ -14,6 +14,9 @@ import RegisterPage from '../pages/RegisterPage'
 import DashboardPage from '../pages/DashboardPage'
 import NotFound from '../pages/NotFound'
 
+// 🔐 ADMIN PANEL - Tamamilə ayrı sistem
+import AdminApp from '../admin/AdminApp'
+
 // Loading Component
 const LoadingScreen = () => (
   <div style={{
@@ -52,7 +55,7 @@ const LoadingScreen = () => (
   </div>
 );
 
-// Protected Route Wrapper
+// Protected Route Wrapper (Public app üçün)
 const ProtectedRoute = ({ children }) => {
   const { isLoggedIn, isInitialized } = useAuth();
    
@@ -86,14 +89,19 @@ const Router = () => {
  
   return (
     <Routes>
+      {/* 🔐 ADMIN PANEL - Tamamilə ayrı sistem */}
+      <Route path="/admin/*" element={<AdminApp />} />
+      
+      {/* 🌐 PUBLIC APP - Ana tətbiq */}
+      
       {/* Main Layout Routes */}
       <Route path='/' element={<Layout />}>
-        {/* PUBLIC ROUTES - No login required */}
+        {/* 🏠 PUBLIC ROUTES - No login required */}
         <Route index element={<Home />} />
         <Route path='/products' element={<ProductsPage />} />
         <Route path='/products/:id' element={<ProductDetailPage />} />
                 
-        {/* PROTECTED ROUTES - Login required */}
+        {/* 👤 PROTECTED ROUTES - Login required (USER DASHBOARD) */}
         <Route 
           path='/cart'
           element={
@@ -141,7 +149,7 @@ const Router = () => {
          />
       </Route>
                 
-      {/* Auth Routes (without main layout) */}
+      {/* 🔓 Auth Routes (without main layout) */}
       <Route 
         path='/login'
         element={
@@ -174,8 +182,11 @@ const Router = () => {
           )
         }
        />
+      
+      {/* 🔄 Redirects */}
+      <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
                 
-      {/* 404 */}
+      {/* 🚫 404 */}
       <Route path='*' element={<NotFound />} />
     </Routes>
   )

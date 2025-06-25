@@ -1,61 +1,108 @@
-import React from 'react';
-import { useLocation } from 'react-router-dom';
-import { useAdminAuth } from '../context/AdminAuthContext';
+// src/admin/components/AdminHeader.jsx
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 
-const AdminHeader = () => {
-  const { admin } = useAdminAuth();
-  const location = useLocation();
+const AdminHeader = ({ admin, onLogout, onSidebarToggle, sidebarOpen }) => {
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
-  const getPageTitle = () => {
-    const path = location.pathname;
-    switch (path) {
-      case '/dashboard':
-        return { title: 'Dashboard', subtitle: 'Ümumi icmal və statistika' };
-      case '/orders':
-        return { title: 'Sifarişlər', subtitle: 'Bütün sifarişlərin idarə edilməsi' };
-      case '/products':
-        return { title: 'Məhsullar', subtitle: 'Məhsul kataloqu və inventar' };
-      case '/vendors':
-        return { title: 'Satıcılar', subtitle: 'Vendor hesabları və idarəetmə' };
-      case '/customers':
-        return { title: 'Müştərilər', subtitle: 'Müştəri hesabları və məlumatları' };
-      case '/reports':
-        return { title: 'Hesabatlar', subtitle: 'Analitika və performans hesabatları' };
-      case '/settings':
-        return { title: 'Tənzimləmələr', subtitle: 'Sistem konfiqurasiyası' };
-      default:
-        if (path.includes('/orders/')) {
-          return { title: 'Sifariş Detalları', subtitle: 'Sifariş məlumatları və idarəetmə' };
-        }
-        return { title: 'Admin Panel', subtitle: 'İdarəetmə paneli' };
-    }
-  };
-
-  const { title, subtitle } = getPageTitle();
+  // Safety check üçün
+  const adminFirstName = admin?.firstName || 'A';
+  const adminLastName = admin?.lastName || 'U';
+  const adminFullName = `${admin?.firstName || 'Admin'} ${admin?.lastName || 'User'}`;
 
   return (
     <header className="admin-header">
-      <div className="header-content">
-        <div className="page-info">
-          <h1 className="page-title">{title}</h1>
-          <p className="page-subtitle">{subtitle}</p>
+      <div className="admin-header-left">
+        {/* Sidebar Toggle */}
+        <button 
+          onClick={onSidebarToggle}
+          className="sidebar-toggle"
+          title={sidebarOpen ? 'Sidebar-ı gizlət' : 'Sidebar-ı göstər'}
+        >
+          {sidebarOpen ? '◀' : '▶'}
+        </button>
+
+        {/* Admin Logo */}
+        <Link to="/admin/dashboard" className="admin-logo">
+          <span className="logo-icon">🔐</span>
+          <span className="logo-text">RegzaAPP Admin</span>
+        </Link>
+      </div>
+
+      <div className="admin-header-center">
+        {/* Search */}
+        <div className="admin-search">
+          <input 
+            type="text" 
+            placeholder="Sifariş, məhsul və ya istifadəçi axtarın..."
+            className="search-input"
+          />
+          <button className="search-btn">🔍</button>
         </div>
-        
-        <div className="header-actions">
-          <div className="current-time">
-            {new Date().toLocaleDateString('az-AZ', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })}
-          </div>
-          
-          <div className="admin-menu">
-            <span className="welcome-text">
-              Xoş gəlmisiniz, {admin?.firstName}!
-            </span>
-          </div>
+      </div>
+
+      <div className="admin-header-right">
+        {/* Notifications */}
+        <div className="admin-notifications">
+          <button className="notification-btn">
+            🔔
+            <span className="notification-badge">3</span>
+          </button>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="quick-actions">
+          <Link to="/admin/orders" className="quick-action" title="Sifarişlər">
+            📋
+          </Link>
+          <Link to="/admin/products" className="quick-action" title="Məhsullar">
+            📦
+          </Link>
+          <Link to="/admin/users" className="quick-action" title="İstifadəçilər">
+            👥
+          </Link>
+        </div>
+
+        {/* Public Site Link */}
+        <Link to="/" className="public-site-link" title="Ana səhifəyə get">
+          🌐 Ana səhifə
+        </Link>
+
+        {/* Admin Profile */}
+        <div className="admin-profile">
+          <button 
+            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+            className="profile-btn"
+          >
+            <div className="profile-avatar">
+              {admin?.avatar ? (
+                <img src={admin.avatar} alt={adminFullName} />
+              ) : (
+                <span>{adminFirstName[0]}{adminLastName[0]}</span>
+              )}
+            </div>
+            <div className="profile-info">
+              <span className="profile-name">{adminFullName}</span>
+              <span className="profile-role">Admin</span>
+            </div>
+            <span className="profile-arrow">{profileMenuOpen ? '▲' : '▼'}</span>
+          </button>
+
+          {/* Profile Dropdown */}
+          {profileMenuOpen && (
+            <div className="profile-dropdown">
+              <Link to="/admin/profile" className="dropdown-item">
+                👤 Profil
+              </Link>
+              <Link to="/admin/settings" className="dropdown-item">
+                ⚙️ Tənzimləmələr
+              </Link>
+              <div className="dropdown-divider"></div>
+              <button onClick={onLogout} className="dropdown-item logout">
+                🚪 Çıxış
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
