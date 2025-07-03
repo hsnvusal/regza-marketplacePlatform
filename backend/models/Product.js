@@ -1,3 +1,4 @@
+// models/Product.js - Vendor field optional edildi
 const mongoose = require('mongoose');
 const slugify = require('slugify');
 
@@ -25,17 +26,22 @@ const productSchema = new mongoose.Schema({
     maxlength: [500, 'Qısa təsvir 500 simvoldan çox ola bilməz']
   },
   
-  // Vendor məlumatı
+  // UPDATED: Vendor məlumatı - Optional edildi
   vendor: {
     type: mongoose.Schema.ObjectId,
-    ref: 'User', // Hələlik User-ə bağlayırıq, sonra Vendor modelinə dəyişəcəyik
-    required: [true, 'Məhsul satıcısı daxil edilməlidir']
+    ref: 'User',
+    required: false // DƏYIŞDI: artıq required deyil
   },
   
-  // Kateqoriya məlumatı
+  // UPDATED: Kateqoriya məlumatı - Category model ilə əlaqə
   category: {
-    type: String, // Hələlik string, sonra Category modelinə bağlayacağıq
-    required: [true, 'Məhsul kateqoriyası seçilməlidir'],
+    type: mongoose.Schema.ObjectId,
+    ref: 'Category',
+    required: false // Admin məhsul yaradarkən optional
+  },
+  // Köhnə category field-ini compatibility üçün saxlayırıq
+  categoryLegacy: {
+    type: String,
     enum: [
       'electronics',
       'clothing', 
@@ -49,10 +55,10 @@ const productSchema = new mongoose.Schema({
       'toys'
     ]
   },
-  subcategory: {
-    type: String,
-    trim: true
-  },
+  subcategories: [{
+    type: mongoose.Schema.ObjectId,
+    ref: 'Category'
+  }],
   
   // Marka və model
   brand: {
@@ -379,27 +385,26 @@ const productSchema = new mongoose.Schema({
 }, {
   timestamps: true,
   toJSON: { 
-  virtuals: true,
-  transform: function(doc, ret) {
-    // Sadə transform
-    ret.id = ret._id.toString();
-    delete ret._id;
-    delete ret.__v;
-    return ret;
+    virtuals: true,
+    transform: function(doc, ret) {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  },
+  toObject: { 
+    virtuals: true,
+    transform: function(doc, ret) {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
   }
-},
-toObject: { 
-  virtuals: true,
-  transform: function(doc, ret) {
-    ret.id = ret._id.toString();
-    delete ret._id;
-    delete ret.__v;
-    return ret;
-  }
-}
 });
 
-// Virtual fields (hesablanır, database-də saxlanmır)
+// Virtual fields
 productSchema.virtual('discountPercentage').get(function() {
   if (this.pricing.discountPrice && this.pricing.sellingPrice > 0) {
     return Math.round(((this.pricing.sellingPrice - this.pricing.discountPrice) / this.pricing.sellingPrice) * 100);
@@ -434,18 +439,36 @@ productSchema.virtual('mainImage').get(function() {
   return mainImg ? mainImg.url : (this.images[0] ? this.images[0].url : null);
 });
 
-// Virtual - reviews population (sonra Review modeli yaradanda əlavə edəcəyik)
-productSchema.virtual('reviews', {
-  ref: 'Review',
-  localField: '_id',
-  foreignField: 'product',
+// Virtual - category populate
+productSchema.virtual('categoryInfo', {
+  ref: 'Category',
+  localField: 'category',
+  foreignField: '_id',
+  justOne: true
+});
+
+// Virtual - subcategories populate
+productSchema.virtual('subcategoryInfo', {
+  ref: 'Category',
+  localField: 'subcategories',
+  foreignField: '_id',
   justOne: false
+});
+
+// Virtual - vendor info (optional)
+productSchema.virtual('vendorInfo', {
+  ref: 'User',
+  localField: 'vendor',
+  foreignField: '_id',
+  justOne: true
 });
 
 // Indexes for better performance
 productSchema.index({ slug: 1 });
 productSchema.index({ vendor: 1 });
 productSchema.index({ category: 1 });
+productSchema.index({ categoryLegacy: 1 });
+productSchema.index({ subcategories: 1 });
 productSchema.index({ sku: 1 });
 productSchema.index({ status: 1 });
 productSchema.index({ visibility: 1 });
@@ -456,12 +479,15 @@ productSchema.index({ 'ratings.average': -1 });
 productSchema.index({ 'stats.purchases': -1 });
 productSchema.index({ createdAt: -1 });
 productSchema.index({ publishedAt: -1 });
+productSchema.index({ brand: 1 });
+productSchema.index({ tags: 1 });
 
 // Compound indexes
 productSchema.index({ status: 1, visibility: 1 });
 productSchema.index({ category: 1, 'pricing.sellingPrice': 1 });
 productSchema.index({ vendor: 1, status: 1 });
 productSchema.index({ featured: 1, status: 1 });
+productSchema.index({ category: 1, status: 1, visibility: 1 });
 
 // Text search index
 productSchema.index({ 
@@ -491,10 +517,28 @@ productSchema.pre('save', function(next) {
   next();
 });
 
-// Pre-save middleware - SKU avtomatik yaratma
-productSchema.pre('save', function(next) {
+// Pre-save middleware - SKU avtomatik yaratma (UPDATED for Category)
+productSchema.pre('save', async function(next) {
   if (this.isNew && !this.sku) {
-    const prefix = this.category.toUpperCase().slice(0, 3);
+    let prefix = 'PRD';
+    
+    // Yeni Category sistemi ilə
+    if (this.category) {
+      try {
+        const Category = require('./Category');
+        const categoryDoc = await Category.findById(this.category);
+        if (categoryDoc) {
+          prefix = categoryDoc.name.toUpperCase().slice(0, 3);
+        }
+      } catch (error) {
+        console.log('Category prefix alma xətası:', error);
+      }
+    }
+    // Köhnə sistem ilə
+    else if (this.categoryLegacy) {
+      prefix = this.categoryLegacy.toUpperCase().slice(0, 3);
+    }
+    
     const timestamp = Date.now().toString().slice(-6);
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     this.sku = `${prefix}${timestamp}${random}`;
@@ -530,7 +574,7 @@ productSchema.statics.findActiveProducts = function(filter = {}) {
   });
 };
 
-// Static method - vendor məhsulları
+// Static method - vendor məhsulları (optional vendor support)
 productSchema.statics.findByVendor = function(vendorId, includeInactive = false) {
   const filter = { vendor: vendorId };
   if (!includeInactive) {
@@ -540,8 +584,13 @@ productSchema.statics.findByVendor = function(vendorId, includeInactive = false)
 };
 
 // Static method - kateqoriya məhsulları
-productSchema.statics.findByCategory = function(category) {
-  return this.findActiveProducts({ category });
+productSchema.statics.findByCategory = function(categoryId) {
+  return this.findActiveProducts({ category: categoryId });
+};
+
+// Static method - legacy category support
+productSchema.statics.findByCategoryLegacy = function(categoryLegacy) {
+  return this.findActiveProducts({ categoryLegacy });
 };
 
 // Instance method - stok azalt

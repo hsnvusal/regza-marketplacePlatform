@@ -54,7 +54,7 @@ const getAllOrders = async (req, res) => {
     // Orders tap
     const orders = await Order.find(filter)
       .populate('customer', 'firstName lastName email avatar')
-      .populate('items.product', 'name sku images')
+      .populate('vendorOrders.items.product', 'name sku images')
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit))
@@ -76,7 +76,7 @@ const getAllOrders = async (req, res) => {
         email: order.customer?.email || order.customerInfo?.email,
         avatar: order.customer?.avatar
       },
-      items: order.items?.length || 0,
+      items: order.vendorOrders?.reduce((sum, vo) => sum + (vo.items?.length || 0), 0) || 0,
       total: order.total,
       status: order.status,
       paymentStatus: order.paymentStatus,
@@ -117,8 +117,8 @@ const getOrderById = async (req, res) => {
 
     const order = await Order.findById(id)
       .populate('customer', 'firstName lastName email phone avatar address')
-      .populate('items.product', 'name sku images category brand')
-      .populate('items.vendor', 'businessName firstName lastName')
+      .populate('vendorOrders.items.product', 'name sku images category brand')
+      .populate('vendorOrders.vendor', 'businessName firstName lastName')
       .lean();
 
     if (!order) {
@@ -156,25 +156,36 @@ const getOrderById = async (req, res) => {
       discount: order.discount,
       total: order.total,
 
-      // Items
-      items: order.items?.map(item => ({
-        id: item._id,
-        product: {
-          id: item.product?._id,
-          name: item.product?.name || item.productSnapshot?.name,
-          sku: item.product?.sku || item.productSnapshot?.sku,
-          image: item.product?.images?.[0]?.url || item.productSnapshot?.image
-        },
-        vendor: item.vendor ? {
-          id: item.vendor._id,
-          name: item.vendor.businessName || 
-                `${item.vendor.firstName} ${item.vendor.lastName}`
+      // Vendor Orders (yeni modelə uyğun, təhlükəsizlik yoxlaması ilə)
+      vendorOrders: Array.isArray(order.vendorOrders) ? order.vendorOrders.map(vo => ({
+        vendor: vo.vendor ? {
+          id: vo.vendor._id,
+          name: vo.vendor.businessName || `${vo.vendor.firstName} ${vo.vendor.lastName}`
         } : null,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.totalPrice,
-        selectedVariants: item.selectedVariants
-      })) || [],
+        vendorOrderNumber: vo.vendorOrderNumber,
+        status: vo.status,
+        subtotal: vo.subtotal,
+        tax: vo.tax,
+        shipping: vo.shipping,
+        total: vo.total,
+        items: Array.isArray(vo.items) ? vo.items.map(item => ({
+          id: item._id,
+          product: item.product ? {
+            id: item.product._id,
+            name: item.product.name,
+            sku: item.product.sku,
+            image: item.product.images?.[0]?.url,
+            brand: item.product.brand,
+            category: item.product.category
+          } : (item.productSnapshot || {}),
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          selectedVariants: item.selectedVariants,
+          status: item.status,
+          notes: item.notes
+        })) : []
+      })) : [],
 
       // Addresses
       shippingAddress: order.shippingAddress,
@@ -198,7 +209,7 @@ const getOrderById = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get order by ID error:', error);
+    console.error('Get order by ID error:', error, error?.stack, order);
     res.status(500).json({
       success: false,
       message: 'Sifariş məlumatları alınarkən xəta baş verdi'

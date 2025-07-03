@@ -20,6 +20,11 @@ const orderRoutes = require('./routes/orders');
 const reviewRoutes = require('./routes/review');
 const paymentRoutes = require('./routes/payments'); // 🆕 STRIPE PAYMENTS
 const adminRoutes = require('./routes/admin'); // 🆕 ADMIN ROUTES
+const adminProductsRoutes = require('./routes/admin/adminProductsRoutes');
+const categoryRoutes = require('./routes/categoryRoutes');
+const adminVendorsRoutes = require('./routes/admin/adminVendorsRoutes');
+
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -151,6 +156,13 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/payments', paymentRoutes); // 🆕 STRIPE PAYMENTS ROUTE
 app.use('/api/admin', adminRoutes); // 🆕 ADMIN ROUTES
+app.use('/api/categories', categoryRoutes); // ƏLAVƏ EDİN
+app.use('/api/admin/products', adminProductsRoutes);
+app.use('/api/admin/categories', require('./routes/admin/adminCategoriesRoutes'));
+app.use('/api/admin/vendors', adminVendorsRoutes);
+
+
+
 
 // 🆕 Test Stripe Configuration
 app.get('/api/test-stripe', (req, res) => {

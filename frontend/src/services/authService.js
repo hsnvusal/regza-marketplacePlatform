@@ -30,13 +30,15 @@ class AuthService {
   // Register user
   async register(userData) {
     try {
+      console.log('🔍 AuthService: Register attempt for:', userData.email);
+      
       // Clean and prepare user data
       const cleanData = {
         firstName: userData.firstName?.trim(),
         lastName: userData.lastName?.trim(),
         email: userData.email?.toLowerCase().trim(),
         password: userData.password,
-        phone: userData.phone?.trim(),
+        phone: userData.phone?.trim() || undefined,
         role: userData.role || 'customer'
       };
       
@@ -45,19 +47,22 @@ class AuthService {
       
       // Store auth data for auto-login
       if (result.success && result.data.token) {
+        console.log('✅ AuthService: Register successful, storing data');
         this.setAuthData(result.data.token, result.data.user);
       }
       
       return result;
     } catch (error) {
+      console.error('❌ AuthService: Register error:', error);
       return handleApiError(error);
     }
   }
   
-  // Get current user profile
+  // Get current user profile - FIX: Correct endpoint
   async getProfile() {
     try {
-      const response = await apiClient.get('/auth/profile');
+      console.log('🔍 AuthService: Getting profile');
+      const response = await apiClient.get('/auth/me'); // FIXED: was /auth/profile
       const result = handleApiResponse(response);
       
       // Update stored user data
@@ -68,14 +73,16 @@ class AuthService {
       
       return result;
     } catch (error) {
+      console.error('❌ AuthService: Get profile error:', error);
       return handleApiError(error);
     }
   }
   
-  // Update user profile
+  // Update user profile - FIX: Correct endpoint
   async updateProfile(profileData) {
     try {
-      const response = await apiClient.put('/auth/profile', profileData);
+      console.log('🔍 AuthService: Updating profile');
+      const response = await apiClient.put('/auth/me', profileData); // FIXED: was /auth/profile
       const result = handleApiResponse(response);
       
       // Update stored user data
@@ -86,19 +93,29 @@ class AuthService {
       
       return result;
     } catch (error) {
+      console.error('❌ AuthService: Update profile error:', error);
       return handleApiError(error);
     }
   }
   
   // Change password
-  async changePassword(currentPassword, newPassword) {
+  async changePassword(currentPassword, newPassword, confirmPassword) {
     try {
       const response = await apiClient.put('/auth/change-password', {
         currentPassword,
-        newPassword
+        newPassword,
+        confirmPassword
       });
       
-      return handleApiResponse(response);
+      const result = handleApiResponse(response);
+      
+      // Update token if new one is provided
+      if (result.success && result.data.token) {
+        const currentUser = this.getCurrentUser();
+        this.setAuthData(result.data.token, currentUser);
+      }
+      
+      return result;
     } catch (error) {
       return handleApiError(error);
     }
@@ -134,7 +151,7 @@ class AuthService {
   // Verify token
   async verifyToken() {
     try {
-      const response = await apiClient.get('/auth/verify');
+      const response = await apiClient.get('/auth/me'); // FIXED: was /auth/verify
       return handleApiResponse(response);
     } catch (error) {
       // If verification fails, clear auth data
@@ -143,7 +160,7 @@ class AuthService {
     }
   }
   
-  // Set auth data in localStorage - MATCHED WITH API.JS KEYS
+  // Set auth data in localStorage with multiple keys for reliability
   setAuthData(token, user) {
     try {
       console.log('💾 AuthService: Storing auth data');
@@ -151,12 +168,18 @@ class AuthService {
       console.log('💾 User exists:', !!user);
       
       if (token) {
-        localStorage.setItem('marketplace_token', token); // MATCHED WITH API.JS
-        console.log('✅ Token stored in marketplace_token');
+        // Store in multiple locations for reliability
+        localStorage.setItem('marketplace_token', token);
+        localStorage.setItem('mp_token', token);
+        sessionStorage.setItem('marketplace_token_backup', token);
+        console.log('✅ Token stored in multiple locations');
       }
+      
       if (user) {
-        localStorage.setItem('marketplace_user', JSON.stringify(user)); // MATCHED WITH API.JS
-        console.log('✅ User data stored in marketplace_user');
+        localStorage.setItem('marketplace_user', JSON.stringify(user));
+        localStorage.setItem('mp_user', JSON.stringify(user));
+        sessionStorage.setItem('marketplace_user_backup', JSON.stringify(user));
+        console.log('✅ User data stored in multiple locations');
       }
       
       console.log('✅ Auth data stored successfully');
@@ -165,17 +188,22 @@ class AuthService {
     }
   }
   
-  // Clear auth data
+  // Clear auth data from all locations
   clearAuthData() {
     try {
       console.log('🗑️ AuthService: Clearing auth data');
       
-      localStorage.removeItem('marketplace_token'); // MATCHED WITH API.JS
-      localStorage.removeItem('marketplace_user'); // MATCHED WITH API.JS
+      // Clear from all storage locations
+      localStorage.removeItem('marketplace_token');
+      localStorage.removeItem('marketplace_user');
+      localStorage.removeItem('mp_token');
+      localStorage.removeItem('mp_user');
+      sessionStorage.removeItem('marketplace_token_backup');
+      sessionStorage.removeItem('marketplace_user_backup');
       localStorage.removeItem('marketplace_cart');
       localStorage.removeItem('marketplace_cart_id');
       
-      console.log('✅ Auth data cleared');
+      console.log('✅ Auth data cleared from all locations');
     } catch (error) {
       console.error('❌ Error clearing auth data:', error);
     }
@@ -188,7 +216,6 @@ class AuthService {
       
       // Optional: Call backend logout endpoint
       await apiClient.post('/auth/logout').catch(() => {
-        // Ignore logout API errors, just clear local data
         console.log('⚠️ Logout API call failed, continuing with local cleanup');
       });
     } finally {
@@ -210,10 +237,17 @@ class AuthService {
     return isAuth;
   }
   
-  // Get current user from storage
+  // Get current user from storage with fallback
   getCurrentUser() {
     try {
-      const userData = localStorage.getItem('marketplace_user'); // MATCHED WITH API.JS
+      let userData = localStorage.getItem('marketplace_user');
+      
+      // Fallback to backup storage
+      if (!userData) {
+        userData = localStorage.getItem('mp_user') || 
+                   sessionStorage.getItem('marketplace_user_backup');
+      }
+      
       const user = userData ? JSON.parse(userData) : null;
       
       if (user) {
@@ -226,14 +260,20 @@ class AuthService {
     } catch (error) {
       console.error('❌ Error parsing stored user data:', error);
       // Clear corrupted data
-      localStorage.removeItem('marketplace_user');
+      this.clearAuthData();
       return null;
     }
   }
   
-  // Get auth token
+  // Get auth token with fallback
   getToken() {
-    const token = localStorage.getItem('marketplace_token'); // MATCHED WITH API.JS
+    let token = localStorage.getItem('marketplace_token');
+    
+    // Fallback to backup storage
+    if (!token) {
+      token = localStorage.getItem('mp_token') || 
+              sessionStorage.getItem('marketplace_token_backup');
+    }
     
     if (token) {
       console.log('🎫 AuthService: Found token in storage');

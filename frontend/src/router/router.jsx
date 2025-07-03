@@ -14,6 +14,10 @@ import RegisterPage from '../pages/RegisterPage'
 import DashboardPage from '../pages/DashboardPage'
 import NotFound from '../pages/NotFound'
 
+// 📂 CATEGORY PAGES - YENİ
+import CategoriesPage from '../pages/CategoriesPage'
+import CategoryDetailPage from '../pages/CategoryDetailPage'
+
 // 🔐 ADMIN PANEL - Tamamilə ayrı sistem
 import AdminApp from '../admin/AdminApp'
 
@@ -98,6 +102,12 @@ const Router = () => {
       <Route path='/' element={<Layout />}>
         {/* 🏠 PUBLIC ROUTES - No login required */}
         <Route index element={<Home />} />
+        
+        {/* 📂 CATEGORY ROUTES - YENİ ƏLAVƏ EDİLDİ */}
+        <Route path='/categories' element={<CategoriesPage />} />
+        <Route path='/categories/:slug' element={<CategoryDetailPage />} />
+        
+        {/* 📦 PRODUCT ROUTES */}
         <Route path='/products' element={<ProductsPage />} />
         <Route path='/products/:id' element={<ProductDetailPage />} />
                 

@@ -23,12 +23,13 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('💾 Setting storage data...');
       
+      // Store in multiple locations for reliability
       localStorage.setItem('marketplace_token', token);
       localStorage.setItem('marketplace_user', JSON.stringify(userData));
-      sessionStorage.setItem('marketplace_token_backup', token);
-      sessionStorage.setItem('marketplace_user_backup', JSON.stringify(userData));
       localStorage.setItem('mp_token', token);
       localStorage.setItem('mp_user', JSON.stringify(userData));
+      sessionStorage.setItem('marketplace_token_backup', token);
+      sessionStorage.setItem('marketplace_user_backup', JSON.stringify(userData));
       
       console.log('✅ Storage data set in multiple locations');
       return true;
@@ -52,8 +53,10 @@ export const AuthProvider = ({ children }) => {
       if (!token || !userData) {
         console.log('🔄 Primary storage empty, checking backups...');
         
-        token = sessionStorage.getItem('marketplace_token_backup') || localStorage.getItem('mp_token');
-        userData = sessionStorage.getItem('marketplace_user_backup') || localStorage.getItem('mp_user');
+        token = localStorage.getItem('mp_token') || 
+                sessionStorage.getItem('marketplace_token_backup');
+        userData = localStorage.getItem('mp_user') || 
+                   sessionStorage.getItem('marketplace_user_backup');
         
         console.log('🔍 Backup storage check:');
         console.log('🔍 backup token:', !!token);
@@ -273,6 +276,73 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // NEW: Register function
+  const register = useCallback(async (registrationData) => {
+    try {
+      console.log('📝 Register attempt for:', registrationData.email);
+      setIsLoading(true);
+      
+      // Test localStorage functionality
+      console.log('🧪 Testing localStorage functionality...');
+      try {
+        const testKey = 'test_' + Date.now();
+        const testValue = 'test_value_' + Date.now();
+        
+        localStorage.setItem(testKey, testValue);
+        const retrieved = localStorage.getItem(testKey);
+        localStorage.removeItem(testKey);
+        
+        if (retrieved !== testValue) {
+          throw new Error('localStorage not working properly');
+        }
+        console.log('✅ localStorage test passed');
+      } catch (storageError) {
+        console.error('❌ localStorage test failed:', storageError);
+        toastManager.error('Brauzeriniz məlumat saxlama funksiyasını dəstəkləmir');
+        return { success: false, error: 'localStorage not supported' };
+      }
+      
+      // Call authService register
+      const result = await authService.register(registrationData);
+      
+      console.log('📋 Register API Response:', {
+        success: result.success,
+        hasToken: !!(result.data?.token),
+        hasUser: !!(result.data?.user),
+        userEmail: result.data?.user?.email
+      });
+      
+      if (result.success) {
+        console.log('✅ Registration successful via API');
+        
+        const storageSuccess = setStorageData(result.data.token, result.data.user);
+        
+        if (!storageSuccess) {
+          console.error('❌ Storage failed!');
+          toastManager.error('Məlumatlar saxlanmadı - brauzer problemi');
+          return { success: false, error: 'Storage failed' };
+        }
+        
+        // Mark user as just logged in for cart sync
+        sessionStorage.setItem('user_just_logged_in', 'true');
+        console.log('🔐 User marked as just registered and logged in');
+        
+        setUser(result.data.user);
+        setIsLoggedIn(true);
+        
+        return { success: true, user: result.data.user };
+      } else {
+        console.log('❌ API Registration failed:', result.error);
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      console.error('❌ Registration error:', error);
+      return { success: false, error: error.message || 'Qeydiyyat zamanı xəta baş verdi' };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   // Logout function
   const logout = useCallback(async (showToastMessage = true) => {
     console.log('🔍 Logout initiated');
@@ -303,8 +373,9 @@ export const AuthProvider = ({ children }) => {
     isLoggedIn,
     isInitialized,
     
-    // Functions - REMOVED loginMock
+    // Functions - ADDED register function
     login,
+    register, // NEW
     logout,
     hasRole,
     hasAnyRole,

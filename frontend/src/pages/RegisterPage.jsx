@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import authService from '../services/authService';
 import toastManager from '../utils/toastManager';
 
 const RegisterPage = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { register } = useAuth();
   
   // Form state
   const [formData, setFormData] = useState({
@@ -42,33 +41,49 @@ const RegisterPage = () => {
     }
   };
 
-  // Form validation
+  // IMPROVED Form validation to match backend
   const validateForm = () => {
     const newErrors = {};
 
-    // Required fields
+    // Name validation - matches backend regex
     if (!formData.firstName.trim()) {
       newErrors.firstName = 'Ad tələb olunur';
     } else if (formData.firstName.trim().length < 2) {
       newErrors.firstName = 'Ad ən azı 2 simvol olmalıdır';
+    } else if (formData.firstName.trim().length > 50) {
+      newErrors.firstName = 'Ad 50 simvoldan çox ola bilməz';
+    } else if (!/^[a-zA-ZəöüğıçşƏÖÜĞIÇŞ\s]+$/.test(formData.firstName.trim())) {
+      newErrors.firstName = 'Ad yalnız hərflərdən ibarət ola bilər';
     }
 
     if (!formData.lastName.trim()) {
       newErrors.lastName = 'Soyad tələb olunur';
     } else if (formData.lastName.trim().length < 2) {
       newErrors.lastName = 'Soyad ən azı 2 simvol olmalıdır';
+    } else if (formData.lastName.trim().length > 50) {
+      newErrors.lastName = 'Soyad 50 simvoldan çox ola bilməz';
+    } else if (!/^[a-zA-ZəöüğıçşƏÖÜĞIÇŞ\s]+$/.test(formData.lastName.trim())) {
+      newErrors.lastName = 'Soyad yalnız hərflərdən ibarət ola bilər';
     }
 
+    // Email validation - matches backend
     if (!formData.email.trim()) {
       newErrors.email = 'Email tələb olunur';
+    } else if (formData.email.length > 100) {
+      newErrors.email = 'Email 100 simvoldan çox ola bilməz';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Düzgün email ünvanı daxil edin';
+      newErrors.email = 'Düzgün email formatı daxil edin';
     }
 
+    // Password validation - MATCHES BACKEND EXACTLY
     if (!formData.password) {
       newErrors.password = 'Şifrə tələb olunur';
     } else if (formData.password.length < 6) {
       newErrors.password = 'Şifrə ən azı 6 simvol olmalıdır';
+    } else if (formData.password.length > 100) {
+      newErrors.password = 'Şifrə 100 simvoldan çox ola bilməz';
+    } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+      newErrors.password = 'Şifrə ən azı bir kiçik hərf, bir böyük hərf və bir rəqəm daxil etməlidir';
     }
 
     if (!formData.confirmPassword) {
@@ -77,8 +92,17 @@ const RegisterPage = () => {
       newErrors.confirmPassword = 'Şifrələr uyğun gəlmir';
     }
 
-    if (formData.phone && !/^[\+]?[0-9\s\-\(\)]{10,}$/.test(formData.phone.trim())) {
-      newErrors.phone = 'Düzgün telefon nömrəsi daxil edin';
+    // Phone validation - matches backend (optional)
+    if (formData.phone && formData.phone.trim()) {
+      // Basic phone validation - backend uses isMobilePhone
+      if (!/^[\+]?[0-9\s\-\(\)]{10,}$/.test(formData.phone.trim())) {
+        newErrors.phone = 'Düzgün telefon nömrəsi daxil edin';
+      }
+    }
+
+    // Role validation
+    if (!['customer', 'vendor'].includes(formData.role)) {
+      newErrors.role = 'Role yalnız customer və ya vendor ola bilər';
     }
 
     if (!formData.agreeToTerms) {
@@ -103,24 +127,33 @@ const RegisterPage = () => {
     try {
       console.log('📝 Register attempt for:', formData.email);
 
-      // Prepare registration data
+      // Prepare registration data - EXACTLY as backend expects
       const registrationData = {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.toLowerCase().trim(),
-        password: formData.password,
-        phone: formData.phone.trim() || undefined,
+        password: formData.password, // Don't trim password!
         role: formData.role
       };
 
+      // Only add phone if it's provided and not empty
+      if (formData.phone && formData.phone.trim()) {
+        registrationData.phone = formData.phone.trim();
+      }
+
+      console.log('📤 Sending registration data:', {
+        ...registrationData,
+        password: '[HIDDEN]'
+      });
+
       // Use toastManager.promise for better UX
       const result = await toastManager.promise(
-        authService.register(registrationData),
+        register(registrationData),
         {
           loading: 'Qeydiyyat edilir...',
           success: (data) => {
             if (data.success) {
-              return `Qeydiyyat tamamlandı! Xoş gəlmisiniz, ${data.data.user.firstName}!`;
+              return `Qeydiyyat tamamlandı! Xoş gəlmisiniz, ${data.user.firstName}!`;
             }
             throw new Error(data.error);
           },
@@ -131,12 +164,9 @@ const RegisterPage = () => {
       if (result.success) {
         console.log('✅ Registration successful');
         
-        // Auto-login after successful registration
-        sessionStorage.setItem('user_just_logged_in', 'true');
-        
-        // Redirect based on role
+        // Redirect based on role after successful registration
         setTimeout(() => {
-          switch (result.data.user.role) {
+          switch (result.user.role) {
             case 'admin':
               navigate('/admin');
               break;
@@ -151,20 +181,42 @@ const RegisterPage = () => {
         console.error('❌ Registration failed:', result.error);
         
         // Handle specific errors
-        if (result.error?.includes('email')) {
+        if (result.error?.includes('email') || result.error?.includes('qeydiyyatdan keçib')) {
           setErrors({ email: 'Bu email artıq qeydiyyatdan keçib' });
         }
       }
 
     } catch (error) {
       console.error('❌ Registration error:', error);
-      toastManager.error(error.message || 'Qeydiyyat zamanı xəta baş verdi');
+      
+      // Handle validation errors from backend
+      if (error.response?.status === 400) {
+        const errorData = error.response.data;
+        console.log('📋 Backend validation errors:', errorData);
+        
+        if (errorData.errors && Array.isArray(errorData.errors)) {
+          const backendErrors = {};
+          errorData.errors.forEach(err => {
+            if (err.param) {
+              backendErrors[err.param] = err.msg;
+            }
+          });
+          setErrors(backendErrors);
+          toastManager.error('Validation xətaları düzəldin');
+        } else if (errorData.message) {
+          if (errorData.message.includes('email') || errorData.message.includes('qeydiyyatdan keçib')) {
+            setErrors({ email: 'Bu email artıq qeydiyyatdan keçib' });
+          } else {
+            toastManager.error(errorData.message);
+          }
+        }
+      } else {
+        toastManager.error(error.message || 'Qeydiyyat zamanı xəta baş verdi');
+      }
     } finally {
       setIsLoading(false);
     }
   };
-
-
 
   return (
     <div style={{
@@ -400,7 +452,7 @@ const RegisterPage = () => {
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  placeholder="Şifrəniz"
+                  placeholder="Şifrəniz (A-z, 0-9)"
                   style={{
                     width: '100%',
                     padding: '12px 40px 12px 16px',
@@ -435,6 +487,9 @@ const RegisterPage = () => {
                   {errors.password}
                 </p>
               )}
+              <p style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>
+                Ən azı 6 simvol, 1 böyük hərf, 1 kiçik hərf, 1 rəqəm
+              </p>
             </div>
 
             <div>
@@ -547,8 +602,6 @@ const RegisterPage = () => {
           >
             {isLoading ? '⏳ Qeydiyyat edilir...' : '📝 Qeydiyyatdan keç'}
           </button>
-
-
         </form>
 
         {/* Login Link */}

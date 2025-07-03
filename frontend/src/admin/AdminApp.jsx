@@ -11,6 +11,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminOrders from './pages/AdminOrders';
 import AdminOrderDetails from './pages/AdminOrderDetails';
 import AdminProducts from './pages/AdminProducts';
+import AdminCategories from './pages/AdminCategories'; // ✅ ƏLAVƏ EDİLDİ
 import AdminProductDetails from './pages/AdminProductDetails';
 import AdminUsers from './pages/AdminUsers';
 // import AdminVendors from './pages/AdminVendors';
@@ -47,6 +48,8 @@ const AdminApp = () => {
           {/* 📦 Products Management */}
           <Route path="products" element={<AdminProducts />} />
           <Route path="products/:productId" element={<AdminProductDetails />} />
+          
+          <Route path="categories" element={<AdminCategories />} />
           
           {/* 👥 Users Management */}
           <Route path="users" element={<AdminUsers />} />

@@ -1,11 +1,17 @@
-// src/admin/pages/AdminProducts.jsx
+// src/admin/pages/AdminProducts.jsx - Düzəldilmiş versiya
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import adminService from '../services/adminService';
 
 const AdminProducts = () => {
   const [products, setProducts] = useState([]);
-  const [pagination, setPagination] = useState({});
+  const [pagination, setPagination] = useState({
+    totalProducts: 0,
+    currentPage: 1,
+    totalPages: 1,
+    hasPrevPage: false,
+    hasNextPage: false
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState({
@@ -24,26 +30,42 @@ const AdminProducts = () => {
   const [vendors, setVendors] = useState([]);
 
   useEffect(() => {
-    loadProducts();
-    loadFilters();
-  }, [filters]);
+  loadFilters();
+}, []);
+
+useEffect(() => {
+  loadProducts();
+}, [filters]);
 
   const loadProducts = async () => {
     setIsLoading(true);
     setError('');
     
     try {
+      // DÜZƏLTMƏ: Response structure düzgün handle et
       const result = await adminService.getProducts(filters);
       
       if (result.success) {
-        setProducts(result.products);
-        setPagination(result.pagination);
+        // Safety check: products array-in mövcudluğunu yoxla
+        setProducts(Array.isArray(result.products) ? result.products : []);
+        
+        // Pagination məlumatlarını düzgün təyin et
+        setPagination({
+          totalProducts: result.pagination?.totalProducts || result.pagination?.total || 0,
+          currentPage: result.pagination?.currentPage || result.pagination?.current || 1,
+          totalPages: result.pagination?.totalPages || result.pagination?.pages || 1,
+          hasPrevPage: result.pagination?.hasPrevPage || result.pagination?.hasPrev || false,
+          hasNextPage: result.pagination?.hasNextPage || result.pagination?.hasNext || false
+        });
       } else {
-        setError(result.error);
+        setError(result.error || 'Məhsullar yüklənərkən xəta baş verdi');
+        // DÜZƏLTMƏ: Error halında boş array təyin et
+        setProducts([]);
       }
     } catch (error) {
       console.error('Products loading error:', error);
       setError('Məhsullar yüklənərkən xəta baş verdi');
+      setProducts([]);
     } finally {
       setIsLoading(false);
     }
@@ -56,11 +78,11 @@ const AdminProducts = () => {
         adminService.getVendors({ status: 'approved' })
       ]);
       
-      if (categoriesResult.success) {
+      if (categoriesResult.success && Array.isArray(categoriesResult.categories)) {
         setCategories(categoriesResult.categories);
       }
       
-      if (vendorsResult.success) {
+      if (vendorsResult.success && Array.isArray(vendorsResult.vendors)) {
         setVendors(vendorsResult.vendors);
       }
     } catch (error) {
@@ -77,14 +99,16 @@ const AdminProducts = () => {
   };
 
   const handlePageChange = (newPage) => {
-    setFilters(prev => ({
-      ...prev,
-      page: newPage
-    }));
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setFilters(prev => ({
+        ...prev,
+        page: newPage
+      }));
+    }
   };
 
   const handleStatusUpdate = async (productId, newStatus) => {
-    if (!window.confirm(`Məhsul statusunu "${newStatus}" olaraq dəyişmək istəyirsiniz?`)) {
+    if (!window.confirm(`Məhsul statusunu "${getStatusText(newStatus)}" olaraq dəyişmək istəyirsiniz?`)) {
       return;
     }
 
@@ -125,12 +149,29 @@ const AdminProducts = () => {
     }
   };
 
+  // DÜZƏLTMƏ: Status text helper function əlavə et
+  const getStatusText = (status) => {
+    const statusMap = {
+      'active': 'Aktiv',
+      'inactive': 'Deaktiv', 
+      'pending': 'Gözləyir',
+      'rejected': 'Rədd edilib',
+      'draft': 'Qaralama',
+      'out_of_stock': 'Stokda yox',
+      'discontinued': 'Dayandırılıb'
+    };
+    return statusMap[status] || status;
+  };
+
   const getStatusBadge = (status) => {
     const config = {
       'active': { bg: '#10b981', color: 'white', text: 'Aktiv' },
       'inactive': { bg: '#6b7280', color: 'white', text: 'Deaktiv' },
       'pending': { bg: '#f59e0b', color: 'white', text: 'Gözləyir' },
-      'rejected': { bg: '#ef4444', color: 'white', text: 'Rədd edilib' }
+      'rejected': { bg: '#ef4444', color: 'white', text: 'Rədd edilib' },
+      'draft': { bg: '#8b5cf6', color: 'white', text: 'Qaralama' },
+      'out_of_stock': { bg: '#f97316', color: 'white', text: 'Stokda yox' },
+      'discontinued': { bg: '#64748b', color: 'white', text: 'Dayandırılıb' }
     };
     
     const style = config[status] || config.inactive;
@@ -153,10 +194,12 @@ const AdminProducts = () => {
   };
 
   const formatPrice = (amount) => {
+    if (!amount && amount !== 0) return '-';
     return adminService.formatPrice(amount);
   };
 
   const formatDate = (date) => {
+    if (!date) return '-';
     return adminService.formatDate(date, {
       month: 'short',
       day: 'numeric',
@@ -164,9 +207,10 @@ const AdminProducts = () => {
     });
   };
 
+  // DÜZƏLTMƏ: Loading state-i daha yaxşı handle et
   if (isLoading) {
     return (
-      <div className="admin-loading">
+      <div className="admin-loading" style={{ textAlign: 'center', padding: '50px' }}>
         <div className="loading-spinner"></div>
         <p>Məhsullar yüklənir...</p>
       </div>
@@ -212,6 +256,9 @@ const AdminProducts = () => {
             <option value="inactive">Deaktiv</option>
             <option value="pending">Gözləyən</option>
             <option value="rejected">Rədd edilmiş</option>
+            <option value="draft">Qaralama</option>
+            <option value="out_of_stock">Stokda yox</option>
+            <option value="discontinued">Dayandırılıb</option>
           </select>
           
           <select 
@@ -235,7 +282,7 @@ const AdminProducts = () => {
             <option value="all">Bütün satıcılar</option>
             {vendors.map(vendor => (
               <option key={vendor._id} value={vendor._id}>
-                {vendor.businessName}
+                {vendor.businessName || `${vendor.firstName} ${vendor.lastName}`}
               </option>
             ))}
           </select>
@@ -288,9 +335,25 @@ const AdminProducts = () => {
 
       {/* Error Display */}
       {error && (
-        <div className="error-message">
-          ❌ {error}
-          <button onClick={loadProducts} className="retry-btn">
+        <div className="error-message" style={{ 
+          backgroundColor: '#fed7d7', 
+          color: '#9b2c2c', 
+          padding: '10px', 
+          borderRadius: '4px', 
+          margin: '10px 0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <span>❌ {error}</span>
+          <button onClick={loadProducts} className="retry-btn" style={{
+            backgroundColor: '#e53e3e',
+            color: 'white',
+            border: 'none',
+            padding: '5px 10px',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}>
             Yenidən cəhd edin
           </button>
         </div>
@@ -313,15 +376,17 @@ const AdminProducts = () => {
             </tr>
           </thead>
           <tbody>
-            {products.length > 0 ? (
+            {/* DÜZƏLTMƏ: products array-in mövcudluğunu yoxla */}
+            {Array.isArray(products) && products.length > 0 ? (
               products.map((product) => (
                 <tr key={product._id}>
                   <td>
                     <div className="product-info">
                       <img 
-                        src={product.images?.[0] || '/placeholder.jpg'} 
+                        src={product.images?.[0]?.url || product.images?.[0] || '/placeholder.jpg'} 
                         alt={product.name}
                         className="product-thumbnail"
+                        style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
                       />
                       <div>
                         <Link to={`/admin/products/${product._id}`} className="product-name">
@@ -333,35 +398,59 @@ const AdminProducts = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="product-sku">{product.sku}</td>
+                  <td className="product-sku">{product.sku || '-'}</td>
                   <td className="product-category">
                     {product.category?.name || '-'}
                   </td>
                   <td className="product-vendor">
-                    {product.vendor?.businessName || '-'}
+                    {product.vendor?.businessName || 
+                     (product.vendor ? `${product.vendor.firstName} ${product.vendor.lastName}` : '-')}
                   </td>
                   <td className="product-price">
                     <div className="price-info">
-                      <span className="current-price">{formatPrice(product.price)}</span>
-                      {product.discountPrice && (
-                        <span className="discount-price">{formatPrice(product.discountPrice)}</span>
+                      <span className="current-price">
+                        {formatPrice(product.pricing?.sellingPrice || product.price)}
+                      </span>
+                      {(product.pricing?.discountPrice || product.discountPrice) && (
+                        <span className="discount-price">
+                          {formatPrice(product.pricing?.discountPrice || product.discountPrice)}
+                        </span>
                       )}
                     </div>
                   </td>
                   <td className="product-stock">
-                    <span className={`stock-badge ${product.stock <= product.lowStockThreshold ? 'low' : 'normal'}`}>
-                      {product.stock}
+                    <span className={`stock-badge ${
+                      (product.inventory?.stock || product.stock || 0) <= 
+                      (product.inventory?.lowStockThreshold || product.lowStockThreshold || 5) ? 'low' : 'normal'
+                    }`}>
+                      {product.inventory?.stock || product.stock || 0}
                     </span>
                   </td>
                   <td>{getStatusBadge(product.status)}</td>
                   <td className="product-date">{formatDate(product.createdAt)}</td>
                   <td>
                     <div className="action-buttons">
-                      <Link to={`/admin/products/${product._id}`} className="view-btn">
+                      <Link to={`/admin/products/${product._id}`} className="view-btn" style={{
+                        padding: '4px 8px',
+                        margin: '2px',
+                        textDecoration: 'none',
+                        backgroundColor: '#3182ce',
+                        color: 'white',
+                        borderRadius: '4px',
+                        fontSize: '12px'
+                      }}>
                         👁️ Bax
                       </Link>
                       
-                      <Link to={`/admin/products/${product._id}/edit`} className="edit-btn">
+                      <Link to={`/admin/products/${product._id}/edit`} className="edit-btn" style={{
+                        padding: '4px 8px',
+                        margin: '2px',
+                        textDecoration: 'none',
+                        backgroundColor: '#805ad5',
+                        color: 'white',
+                        borderRadius: '4px',
+                        fontSize: '12px'
+                      }}>
                         ✏️ Redaktə
                       </Link>
                       
@@ -372,13 +461,16 @@ const AdminProducts = () => {
                             onClick={() => handleStatusUpdate(product._id, 'active')}
                             className="quick-action-btn approve"
                             title="Təsdiqlə"
-                          >
-                            ✅
-                          </button>
-                          <button 
-                            onClick={() => handleStatusUpdate(product._id, 'rejected')}
-                            className="quick-action-btn reject"
-                            title="Rədd et"
+                            style={{
+                              padding: '4px 8px',
+                              margin: '2px',
+                              backgroundColor: '#e53e3e',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
                           >
                             ❌
                           </button>
@@ -390,6 +482,16 @@ const AdminProducts = () => {
                           onClick={() => handleStatusUpdate(product._id, 'inactive')}
                           className="quick-action-btn deactivate"
                           title="Deaktiv et"
+                          style={{
+                            padding: '4px 8px',
+                            margin: '2px',
+                            backgroundColor: '#e53e3e',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
                         >
                           🔴
                         </button>
@@ -400,6 +502,16 @@ const AdminProducts = () => {
                           onClick={() => handleStatusUpdate(product._id, 'active')}
                           className="quick-action-btn activate"
                           title="Aktiv et"
+                          style={{
+                            padding: '4px 8px',
+                            margin: '2px',
+                            backgroundColor: '#38a169',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
                         >
                           🟢
                         </button>
@@ -409,6 +521,16 @@ const AdminProducts = () => {
                         onClick={() => handleDeleteProduct(product._id)}
                         className="delete-btn"
                         title="Sil"
+                        style={{
+                          padding: '4px 8px',
+                          margin: '2px',
+                          backgroundColor: '#e53e3e',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
                       >
                         🗑️
                       </button>
@@ -418,10 +540,12 @@ const AdminProducts = () => {
               ))
             ) : (
               <tr>
-                <td colSpan="9" className="no-data">
-                  {filters.search || filters.status !== 'all' || filters.category !== 'all' ? 
-                    'Axtarış kriteriyalarına uyğun məhsul tapılmadı' : 
-                    'Hələ məhsul yoxdur'
+                <td colSpan="9" className="no-data" style={{ textAlign: 'center', padding: '20px' }}>
+                  {error ? 
+                    'Məhsullar yüklənərkən xəta baş verdi' :
+                    (filters.search || filters.status !== 'all' || filters.category !== 'all' ? 
+                      'Axtarış kriteriyalarına uyğun məhsul tapılmadı' : 
+                      'Hələ məhsul yoxdur')
                   }
                 </td>
               </tr>
@@ -432,11 +556,25 @@ const AdminProducts = () => {
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (
-        <div className="pagination">
+        <div className="pagination" style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          gap: '10px', 
+          margin: '20px 0' 
+        }}>
           <button 
             onClick={() => handlePageChange(pagination.currentPage - 1)}
             disabled={!pagination.hasPrevPage}
             className="pagination-btn"
+            style={{
+              padding: '8px 16px',
+              backgroundColor: pagination.hasPrevPage ? '#3182ce' : '#e2e8f0',
+              color: pagination.hasPrevPage ? 'white' : '#a0aec0',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: pagination.hasPrevPage ? 'pointer' : 'not-allowed'
+            }}
           >
             ← Əvvəlki
           </button>
@@ -449,6 +587,14 @@ const AdminProducts = () => {
             onClick={() => handlePageChange(pagination.currentPage + 1)}
             disabled={!pagination.hasNextPage}
             className="pagination-btn"
+            style={{
+              padding: '8px 16px',
+              backgroundColor: pagination.hasNextPage ? '#3182ce' : '#e2e8f0',
+              color: pagination.hasNextPage ? 'white' : '#a0aec0',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: pagination.hasNextPage ? 'pointer' : 'not-allowed'
+            }}
           >
             Sonrakı →
           </button>
@@ -464,18 +610,20 @@ const AdminProducts = () => {
           </div>
           <div className="summary-item">
             <span className="summary-label">Bu səhifədə:</span>
-            <span className="summary-value">{products.length}</span>
+            <span className="summary-value">{Array.isArray(products) ? products.length : 0}</span>
           </div>
           <div className="summary-item">
             <span className="summary-label">Aktiv məhsullar:</span>
             <span className="summary-value">
-              {products.filter(p => p.status === 'active').length}
+              {Array.isArray(products) ? products.filter(p => p.status === 'active').length : 0}
             </span>
           </div>
           <div className="summary-item">
             <span className="summary-label">Az stoklu məhsullar:</span>
             <span className="summary-value">
-              {products.filter(p => p.stock <= p.lowStockThreshold).length}
+              {Array.isArray(products) ? products.filter(p => 
+                (p.inventory?.stock || p.stock || 0) <= (p.inventory?.lowStockThreshold || p.lowStockThreshold || 5)
+              ).length : 0}
             </span>
           </div>
         </div>
@@ -485,13 +633,41 @@ const AdminProducts = () => {
       <div className="bulk-actions">
         <h4>Toplu əməliyyatlar:</h4>
         <div className="bulk-buttons">
-          <button className="bulk-btn export">
+          <button className="bulk-btn export" style={{
+            padding: '8px 16px',
+            margin: '5px',
+            backgroundColor: '#38a169',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}>
             📊 Excel-ə export et
           </button>
-          <button className="bulk-btn import">
+          <button className="bulk-btn import" style={{
+            padding: '8px 16px',
+            margin: '5px',
+            backgroundColor: '#3182ce',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}>
             📁 Excel-dən import et
           </button>
-          <button className="bulk-btn low-stock">
+          <button 
+            className="bulk-btn low-stock"
+            onClick={() => handleFilterChange('status', 'out_of_stock')}
+            style={{
+              padding: '8px 16px',
+              margin: '5px',
+              backgroundColor: '#f59e0b',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
             ⚠️ Az stoklu məhsulları göstər
           </button>
         </div>

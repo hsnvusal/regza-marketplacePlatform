@@ -904,3 +904,351 @@
     color: white;
   }
 }
+
+
+/* ProductsPage.css - Category inteqrasiyası üçün əlavələr */
+
+/* Breadcrumb styles */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.breadcrumb-link {
+  color: #667eea;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: #5a67d8;
+  text-decoration: underline;
+}
+
+.breadcrumb-separator {
+  margin: 0 0.5rem;
+  color: #a0aec0;
+}
+
+.breadcrumb-current {
+  color: #4a5568;
+  font-weight: 500;
+}
+
+/* Enhanced filter controls */
+.filter-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.view-categories {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #f7fafc;
+  color: #4a5568;
+  text-decoration: none;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.view-categories:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+  transform: translateY(-1px);
+}
+
+/* Enhanced no products section */
+.no-products-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+}
+
+.clear-filters-btn,
+.browse-categories-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.clear-filters-btn {
+  background: #667eea;
+  color: white;
+}
+
+.clear-filters-btn:hover {
+  background: #5a67d8;
+  transform: translateY(-2px);
+}
+
+.browse-categories-btn {
+  background: #f7fafc;
+  color: #4a5568;
+  border: 1px solid #e2e8f0;
+}
+
+.browse-categories-btn:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+  transform: translateY(-2px);
+}
+
+/* Category suggestions section */
+.category-suggestions {
+  margin-top: 3rem;
+  padding: 2rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #f1f3f4;
+}
+
+.category-suggestions h3 {
+  text-align: center;
+  font-size: 1.5rem;
+  color: #2d3748;
+  margin-bottom: 2rem;
+  font-weight: 600;
+}
+
+.category-suggestions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.category-suggestion-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.3s ease;
+}
+
+.category-suggestion-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  border-color: #cbd5e0;
+  background: white;
+}
+
+.category-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(102, 126, 234, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.category-info h4 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0 0 0.25rem;
+}
+
+.category-info p {
+  font-size: 0.9rem;
+  color: #718096;
+  margin: 0;
+}
+
+/* Enhanced filter group for categories */
+.filter-group select:disabled {
+  background: #f7fafc;
+  color: #a0aec0;
+  cursor: not-allowed;
+}
+
+/* Loading states */
+.products-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  color: #718096;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Enhanced results info */
+.results-info {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.results-info p {
+  margin: 0;
+  color: #4a5568;
+  font-weight: 500;
+}
+
+/* Responsive design updates */
+@media (max-width: 768px) {
+  .breadcrumb {
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+  }
+  
+  .breadcrumb-separator {
+    margin: 0 0.25rem;
+  }
+  
+  .filter-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .view-categories {
+    justify-content: center;
+  }
+  
+  .no-products-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .category-suggestions-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .category-suggestion-card {
+    padding: 1rem;
+  }
+  
+  .category-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .category-suggestion-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.75rem;
+  }
+  
+  .category-info h4 {
+    font-size: 1rem;
+  }
+  
+  .category-info p {
+    font-size: 0.8rem;
+  }
+}
+
+/* Enhanced hover effects */
+.product-card {
+  transition: all 0.3s ease;
+}
+
+.product-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+/* Filter toggle enhancement */
+.filter-toggle.active {
+  background: #667eea;
+  color: white;
+}
+
+.filter-count {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+}
+
+/* Category-specific styling */
+.page-header h1 {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0 0 0.5rem;
+}
+
+/* Enhanced search section */
+.search-form {
+  position: relative;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.search-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.search-btn {
+  padding: 0.75rem 1.5rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.search-btn:hover {
+  background: #5a67d8;
+}

@@ -275,26 +275,26 @@ const AdminOrderDetails = () => {
               </tr>
             </thead>
             <tbody>
-              {order.items.map((item, index) => (
-                <tr key={index}>
+              {order.vendorOrders?.flatMap(vo => vo.items.map((item, index) => (
+                <tr key={item.id || index}>
                   <td>
                     <div className="product-info">
                       <img 
-                        src={item.product.image || '/placeholder.jpg'} 
-                        alt={item.product.name}
+                        src={item.product?.image || '/placeholder.jpg'} 
+                        alt={item.product?.name}
                         className="product-image"
                       />
                       <div>
-                        <div className="product-name">{item.product.name}</div>
-                        <div className="product-sku">SKU: {item.product.sku}</div>
+                        <div className="product-name">{item.product?.name}</div>
+                        <div className="product-sku">SKU: {item.product?.sku}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="price">{formatPrice(item.price)}</td>
+                  <td className="price">{formatPrice(item.unitPrice)}</td>
                   <td className="quantity">{item.quantity}</td>
-                  <td className="total">{formatPrice(item.price * item.quantity)}</td>
+                  <td className="total">{formatPrice(item.totalPrice)}</td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>
