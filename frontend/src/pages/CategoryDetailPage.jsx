@@ -115,7 +115,7 @@ const CategoryDetailPage = () => {
   // Məhsul kartı komponenti
   const ProductCard = ({ product }) => (
     <Link
-      to={`/products/${product.slug}`}
+      to={`/products/${product._id || product.id}`}
       style={{
         display: 'block',
         textDecoration: 'none',

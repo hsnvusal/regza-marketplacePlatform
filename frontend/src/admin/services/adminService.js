@@ -762,52 +762,54 @@ class AdminService {
 
   // ===== CATEGORIES METHODS =====
 
-  async getCategories(filters = {}) {
-    try {
-      const queryParams = new URLSearchParams();
-      
-      Object.keys(filters).forEach(key => {
-        if (filters[key] && filters[key] !== 'all' && filters[key] !== '') {
-          queryParams.append(key, filters[key]);
-        }
-      });
+  // src/admin/services/adminService.js - getCategories method
 
-      const response = await fetch(
-        `${API_BASE_URL}/admin/categories?${queryParams.toString()}`,
-        {
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        return {
-          success: true,
-          categories: data.data?.categories || data.categories || [],
-          pagination: data.data?.pagination || data.pagination || {
-            totalCategories: 0,
-            currentPage: 1,
-            totalPages: 1,
-            hasPrevPage: false,
-            hasNextPage: false
-          },
-          stats: data.data?.stats || data.stats || {}
-        };
+async getCategories(filters = {}) {
+  try {
+    const queryParams = new URLSearchParams();
+    
+    // Default olaraq aktiv kategoriyaları al
+    if (!filters.isActive) {
+      queryParams.append('isActive', 'true');
+    }
+    
+    Object.keys(filters).forEach(key => {
+      if (filters[key] && filters[key] !== 'all' && filters[key] !== '') {
+        queryParams.append(key, filters[key]);
       }
-      
+    });
+
+    const response = await fetch(
+      `${API_BASE_URL}/admin/categories?${queryParams.toString()}`,
+      {
+        headers: this.getAuthHeaders(),
+      }
+    );
+
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
       return {
-        success: false,
-        error: data.message || 'Kategoriyalar alınmadı'
-      };
-    } catch (error) {
-      console.error('Get categories error:', error);
-      return {
-        success: false,
-        error: 'Server ilə əlaqə xətası'
+        success: true,
+        categories: data.data?.categories || data.categories || [],
+        pagination: data.data?.pagination || data.pagination || {},
+        stats: data.data?.stats || data.stats || {}
       };
     }
+
+    return {
+      success: false,
+      error: data.message || 'Kategoriyalar alınmadı'
+    };
+
+  } catch (error) {
+    console.error('Get categories error:', error);
+    return {
+      success: false,
+      error: 'Server ilə əlaqə xətası'
+    };
   }
+}
 
   async getCategoryTree(includeInactive = false) {
     try {

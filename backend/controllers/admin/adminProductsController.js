@@ -10,6 +10,8 @@ const mongoose = require('mongoose');
 // @desc    Admin - Bütün məhsulları gətir (filtered)
 // @route   GET /api/admin/products
 // @access  Private/Admin
+// controllers/admin/adminProductsController.js - getProducts method-unu yenilə
+
 const getProducts = asyncHandler(async (req, res) => {
   try {
     const {
@@ -29,10 +31,10 @@ const getProducts = asyncHandler(async (req, res) => {
     const skip = (page - 1) * limit;
     const limitNum = parseInt(limit);
     const pageNum = parseInt(page);
-    
+
     // Filter yaratma
     const filter = {};
-    
+
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -41,46 +43,24 @@ const getProducts = asyncHandler(async (req, res) => {
         { brand: { $regex: search, $options: 'i' } }
       ];
     }
-    
-    // ✅ DÜZƏLİŞ: Category filtri - həm ObjectId həm string dəstəyi
-// Category filter - DÜZƏLTMƏ
-if (category && category !== 'all') {
-  if (mongoose.Types.ObjectId.isValid(category)) {
-    // Yeni Category ObjectId sistemi
-    filter.category = category;
-  } else {
-    // Köhnə string-based category üçün axtarış
-    try {
-      const foundCategory = await Category.findOne({ 
-        $or: [
-          { name: { $regex: category, $options: 'i' } },
-          { slug: category }
-        ]
-      });
-      
-      if (foundCategory) {
-        filter.category = foundCategory._id;
-      } else {
-        // Legacy field-də axtarış
-        filter.categoryLegacy = category;
+
+    // ✅ DÜZƏLİŞ: Category filter - yalnız ObjectId dəstəyi
+    if (category && category !== 'all') {
+      if (mongoose.Types.ObjectId.isValid(category)) {
+        filter.category = category;
       }
-    } catch (err) {
-      console.log('Category search error:', err.message);
-      filter.categoryLegacy = category;
     }
-  }
-}
-    
+
     if (vendor && vendor !== 'all') {
       if (mongoose.Types.ObjectId.isValid(vendor)) {
         filter.vendor = vendor;
       }
     }
-    
+
     if (status && status !== 'all') {
       filter.status = status;
     }
-    
+
     if (featured !== '' && featured !== 'all') {
       filter.featured = featured === 'true';
     }
@@ -99,8 +79,7 @@ if (category && category !== 'all') {
     // Sort object yaratma
     const sortDirection = sortOrder === 'desc' ? -1 : 1;
     const sortObject = {};
-    
-    // Pricing field-ləri üçün düzgün path
+
     if (sortBy === 'price') {
       sortObject['pricing.sellingPrice'] = sortDirection;
     } else if (sortBy === 'stock') {
@@ -109,12 +88,11 @@ if (category && category !== 'all') {
       sortObject[sortBy] = sortDirection;
     }
 
-    console.log('✅ Fixed Filter:', JSON.stringify(filter, null, 2));
-    console.log('✅ Sort:', JSON.stringify(sortObject, null, 2));
+    console.log('✅ Filter:', JSON.stringify(filter, null, 2));
 
-    // Məhsulları tap
+    // ✅ DÜZƏLİŞ: Category populate əlavə et
     const products = await Product.find(filter)
-      .populate('category', 'name slug')
+      .populate('category', 'name slug icon color') // Category məlumatlarını əlavə et
       .populate('vendor', 'firstName lastName businessName email')
       .sort(sortObject)
       .skip(skip)
@@ -136,7 +114,6 @@ if (category && category !== 'all') {
       featured: await Product.countDocuments({ featured: true })
     };
 
-    // ✅ DÜZƏLİŞ: Response structure-u frontend ilə uyğunlaşdır
     const response = {
       products,
       pagination: {
@@ -144,19 +121,12 @@ if (category && category !== 'all') {
         currentPage: pageNum,
         totalPages: totalPages,
         hasPrevPage: pageNum > 1,
-        hasNextPage: pageNum < totalPages,
-        // Alternative keys for compatibility
-        total: total,
-        current: pageNum,
-        pages: totalPages,
-        hasPrev: pageNum > 1,
-        hasNext: pageNum < totalPages
+        hasNextPage: pageNum < totalPages
       },
       stats
     };
 
     console.log(`✅ Admin products fetched: ${products.length} of ${total} total`);
-
     ApiResponse.success(res, response, 'Məhsullar uğurla alındı');
 
   } catch (error) {

@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import productService from '../services/productService';
-import { categoryService } from '../services/categoryService'; // YENİ
+import { categoryService } from '../services/categoryService';
 import toastManager from '../utils/toastManager';
 import './ProductsPage.css';
 
@@ -14,9 +14,9 @@ const GLOBAL_LAST_CLICK = new Map();
 const ProductsPage = () => {
   // State management
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]); // YENİ - Kategoriyalar
+  const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCategoriesLoading, setCategoriesLoading] = useState(true); // YENİ
+  const [isCategoriesLoading, setCategoriesLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -27,10 +27,10 @@ const ProductsPage = () => {
     limit: 12
   });
 
-  // Filters state - UPDATED with category integration
+  // Filters state
   const [filters, setFilters] = useState({
     search: '',
-    category: '', // Bu artıq category ID-si olacaq
+    category: '',
     minPrice: '',
     maxPrice: '',
     rating: '',
@@ -61,13 +61,60 @@ const ProductsPage = () => {
     paginationRef.current = pagination;
   }, [pagination]);
 
-  // YENİ - Load categories for filter dropdown
+  // ŞƏKİL HELPER FUNKSIYALARI
+  const getImageUrl = (product) => {
+    console.log('Product images for', product.name, ':', product.images);
+    console.log('Product mainImage:', product.mainImage);
+    
+    // 1. mainImage varsa onu istifadə et
+    if (product.mainImage) {
+      console.log('Using mainImage:', product.mainImage);
+      return product.mainImage;
+    }
+    
+    // 2. images array-də ilk şəkil varsa
+    if (product.images && product.images.length > 0) {
+      const firstImage = product.images[0];
+      const imageUrl = firstImage.url || firstImage;
+      console.log('Using first image:', imageUrl);
+      return imageUrl;
+    }
+    
+    // 3. Default placeholder
+    console.log('Using placeholder for:', product.name);
+    return `https://picsum.photos/400/400?random=${Math.floor(Math.random() * 1000)}`;
+  };
+
+  // Şəkil yükləmə xətasını handle et
+  const handleImageError = (e) => {
+    console.log('Şəkil yükləmə xətası:', e.target.src);
+    
+    // İlk cəhd: via.placeholder
+    if (!e.target.src.includes('via.placeholder')) {
+      e.target.src = `https://via.placeholder.com/400x400/667eea/ffffff?text=${encodeURIComponent(e.target.alt.substring(0, 10))}`;
+      return;
+    }
+    
+    // İkinci cəhd: rəng ilə placeholder
+    const productName = e.target.alt || 'Məhsul';
+    e.target.style.backgroundColor = '#667eea';
+    e.target.style.display = 'flex';
+    e.target.style.alignItems = 'center';
+    e.target.style.justifyContent = 'center';
+    e.target.style.color = 'white';
+    e.target.style.fontSize = '16px';
+    e.target.style.fontWeight = 'bold';
+    e.target.textContent = '📦';
+    e.target.title = productName;
+  };
+
+  // Load categories for filter dropdown
   const loadCategories = useCallback(async () => {
     try {
       setCategoriesLoading(true);
       const result = await categoryService.getCategories({ 
         limit: 50, 
-        parent: null // Yalnız əsas kategoriyalar
+        parent: null
       });
 
       if (result.success) {
@@ -90,11 +137,11 @@ const ProductsPage = () => {
     loadCategories();
   }, [loadCategories]);
 
-  // Initialize filters from URL params - UPDATED
+  // Initialize filters from URL params
   useEffect(() => {
     const urlFilters = {
       search: searchParams.get('search') || '',
-      category: searchParams.get('category') || '', // Bu artıq category slug/ID ola bilər
+      category: searchParams.get('category') || '',
       minPrice: searchParams.get('minPrice') || '',
       maxPrice: searchParams.get('maxPrice') || '',
       rating: searchParams.get('rating') || '',
@@ -109,7 +156,7 @@ const ProductsPage = () => {
     setPagination(prev => ({ ...prev, currentPage: page }));
   }, [searchParams]);
 
-  // Stable loadProducts function - UPDATED for category support
+  // Stable loadProducts function
   const loadProducts = useCallback(async (filterParams = null, pageParams = null) => {
     try {
       setIsLoading(true);
@@ -127,7 +174,7 @@ const ProductsPage = () => {
 
       if (currentFilters.search?.trim()) queryParams.search = currentFilters.search.trim();
       
-      // YENİ - Category filter handling
+      // Category filter handling
       if (currentFilters.category) {
         // Əgər category ID-dirsə (ObjectId format)
         if (currentFilters.category.match(/^[0-9a-fA-F]{24}$/)) {
@@ -222,7 +269,7 @@ const ProductsPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [categories]); // categories dependency əlavə edildi
+  }, [categories]);
 
   // Load products only when filters or pagination actually change
   useEffect(() => {
@@ -245,7 +292,7 @@ const ProductsPage = () => {
     pagination.currentPage, 
     pagination.limit, 
     loadProducts,
-    isCategoriesLoading // YENİ dependency
+    isCategoriesLoading
   ]);
 
   // Handle filter changes
@@ -312,7 +359,7 @@ const ProductsPage = () => {
     setSearchParams(new URLSearchParams());
   };
 
-  // YENİ - Get current category name for display
+  // Get current category name for display
   const getCurrentCategoryName = () => {
     if (!filters.category) return null;
     
@@ -325,7 +372,7 @@ const ProductsPage = () => {
     return category?.name || null;
   };
 
-  // 🚨 ULTIMATE AGGRESSIVE PROTECTION - Handle add to cart (kept same)
+  // Handle add to cart
   const handleAddToCart = useCallback(async (product) => {
     const productId = product._id;
     const userId = isLoggedIn ? 'user' : 'guest';
@@ -334,7 +381,7 @@ const ProductsPage = () => {
     
     console.log(`🚀 [${now}] handleAddToCart called for:`, product.name);
     
-    // 🛑 GLOBAL AGGRESSIVE PROTECTION
+    // GLOBAL AGGRESSIVE PROTECTION
     
     // 1. Global processing check (across all component instances)
     if (GLOBAL_PROCESSING.has(globalKey)) {
@@ -370,7 +417,7 @@ const ProductsPage = () => {
 
     console.log(`✅ [${now}] PROCEEDING - All checks passed:`, product.name);
 
-    // 🔒 IMMEDIATE GLOBAL AND LOCAL LOCKS
+    // IMMEDIATE GLOBAL AND LOCAL LOCKS
     GLOBAL_PROCESSING.add(globalKey);
     GLOBAL_LAST_CLICK.set(globalKey, now);
     setLoadingProducts(prev => new Set(prev).add(productId));
@@ -500,7 +547,7 @@ const ProductsPage = () => {
   return (
     <div className="products-page">
       <div className="container">
-        {/* Page Header - UPDATED with category breadcrumb */}
+        {/* Page Header */}
         <div className="page-header">
           <div className="breadcrumb">
             <Link to="/" className="breadcrumb-link">Ana səhifə</Link>
@@ -567,7 +614,7 @@ const ProductsPage = () => {
           </div>
         </div>
 
-        {/* Advanced Filters - UPDATED with real categories */}
+        {/* Advanced Filters */}
         {showFilters && (
           <div className="advanced-filters">
             <div className="filter-grid">
@@ -629,7 +676,6 @@ const ProductsPage = () => {
                   Filtrlərı təmizlə
                 </button>
                 
-                {/* YENİ - Link to categories page */}
                 <Link to="/categories" className="view-categories">
                   📂 Kategoriyalar səhifəsi
                 </Link>
@@ -638,7 +684,7 @@ const ProductsPage = () => {
           </div>
         )}
 
-        {/* Results Info - UPDATED */}
+        {/* Results Info */}
         <div className="results-info">
           <p>
             {pagination.totalProducts > 0 ? (
@@ -657,7 +703,7 @@ const ProductsPage = () => {
           </p>
         </div>
 
-        {/* Products Grid - kept same */}
+        {/* Products Grid - ŞƏKİLLƏR DÜZƏLDILMIŞ */}
         {products.length > 0 ? (
           <div className="products-grid">
             {products.map((product) => (
@@ -666,22 +712,35 @@ const ProductsPage = () => {
                   className="product-image"
                   onClick={() => handleProductClick(product._id)}
                 >
-                  <span className="product-emoji">
-                    {product.images?.[0]?.url || '📦'}
-                  </span>
+                  {/* HƏQİQİ ŞƏKİL */}
+                  <img
+                    src={getImageUrl(product)}
+                    alt={product.name || 'Məhsul'}
+                    onError={handleImageError}
+                    onLoad={() => console.log('✅ Şəkil yükləndi:', product.name)}
+                    style={{
+                      width: '100%',
+                      height: '200px',
+                      objectFit: 'cover',
+                      display: 'block',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  
+                  {/* Badge-lər */}
                   {product.featured && (
                     <div className="product-badge featured">Seçilmiş</div>
                   )}
-                  {product.pricing?.discountPercentage > 0 && (
+                  {(product.pricing?.discountPercentage > 0 || product.discountPercentage > 0) && (
                     <div className="product-badge discount">
-                      -{product.pricing.discountPercentage}%
+                      -{product.pricing?.discountPercentage || product.discountPercentage}%
                     </div>
                   )}
                 </div>
 
                 <div className="product-info">
                   <div className="product-vendor">
-                    {product.vendor?.businessName || 'Store'}
+                    {product.vendor?.businessName || product.brand || 'Store'}
                   </div>
                   
                   <h3 
@@ -712,12 +771,12 @@ const ProductsPage = () => {
 
                   <div className="product-price">
                     <span className="current-price">
-                      {formatPrice(product.pricing?.sellingPrice || 0)}
+                      {formatPrice(product.finalPrice || product.pricing?.sellingPrice || 0)}
                     </span>
-                    {product.pricing?.originalPrice && 
-                     product.pricing.originalPrice > product.pricing.sellingPrice && (
+                    {product.pricing?.discountPrice && 
+                     product.pricing?.sellingPrice > product.pricing.discountPrice && (
                       <span className="original-price">
-                        {formatPrice(product.pricing.originalPrice)}
+                        {formatPrice(product.pricing.sellingPrice)}
                       </span>
                     )}
                   </div>
@@ -782,7 +841,7 @@ const ProductsPage = () => {
           </div>
         )}
 
-        {/* Pagination - kept same */}
+        {/* Pagination */}
         {pagination.totalPages > 1 && (
           <div className="pagination">
             <button
@@ -826,7 +885,7 @@ const ProductsPage = () => {
           </div>
         )}
 
-        {/* YENİ - Category suggestions section */}
+        {/* Category suggestions section */}
         {!isLoading && products.length === 0 && categories.length > 0 && (
           <div className="category-suggestions">
             <h3>Digər kategoriyalara baxın</h3>
