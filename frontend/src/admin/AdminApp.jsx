@@ -16,6 +16,7 @@ import CreateProduct from './pages/CreateProduct'; // ✅ Yeni komponent
 
 import AdminProductDetails from './pages/AdminProductDetails';
 import AdminUsers from './pages/AdminUsers';
+import AdminChat from './pages/AdminChat';
 // import AdminVendors from './pages/AdminVendors';
 // import AdminCustomers from './pages/AdminCustomers';
 // import AdminReports from './pages/AdminReports';
@@ -59,6 +60,9 @@ const AdminApp = () => {
           <Route path="users" element={<AdminUsers />} />
           {/* <Route path="vendors" element={<AdminVendors />} /> */}
           {/* <Route path="customers" element={<AdminCustomers />} /> */}
+          
+          {/* 💬 Chat Management */}
+          <Route path="chat" element={<AdminChat />} />
           
           {/* 📈 Reports & Analytics */}
           {/* <Route path="reports" element={<AdminReports />} /> */}
