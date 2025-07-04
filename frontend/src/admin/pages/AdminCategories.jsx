@@ -282,22 +282,7 @@ const AdminCategories = () => {
         </div>
       )}
 
-      {/* Debug info - development üçün */}
-      {process.env.NODE_ENV === 'development' && (
-        <div style={{ 
-          background: '#f0f0f0', 
-          padding: '10px', 
-          margin: '10px 0', 
-          borderRadius: '4px',
-          fontSize: '12px'
-        }}>
-          <strong>Debug Info:</strong><br />
-          Categories length: {categories.length}<br />
-          Loading: {loading.toString()}<br />
-          Error: {error || 'none'}<br />
-          Main categories: {getMainCategories().length}
-        </div>
-      )}
+      
 
       {/* Add/Edit Form */}
       {showAddForm && (

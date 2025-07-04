@@ -4,11 +4,12 @@ const { body } = require('express-validator');
 const {
   getProducts,
   getProduct,
+  getNewProductFormData, // ✅ Yeni import
   createProduct,
   updateProduct,
   deleteProduct,
   updateProductStatus,
-  updateProductStock, // DÜZƏLTMƏ: Stock update method əlavə edildi
+  updateProductStock,
   toggleFeatured,
   bulkOperations,
   getProductStats
@@ -100,6 +101,16 @@ const productValidation = [
 router.get('/stats', getProductStats);
 
 // ===========================================
+// NEW PRODUCT FORM DATA
+// ===========================================
+
+// ✅ YENİ ROUTE: Form data endpoint
+// @route   GET /api/admin/products/new/form-data
+// @desc    Yeni məhsul formu üçün lazımi məlumatlar (kategoriyalar, vendorlar)
+// @access  Private/Admin
+router.get('/new/form-data', getNewProductFormData);
+
+// ===========================================
 // BULK OPERATIONS
 // ===========================================
 
@@ -139,10 +150,13 @@ router.get('/', getProducts);
 // @access  Private/Admin
 router.post('/', productValidation, createProduct);
 
+// ✅ PROBLEMİN HƏLLI: Bu route-ları spesifik route-lardan sonra qoy
 // @route   GET /api/admin/products/:id
 // @desc    Məhsul məlumatını gətir
 // @access  Private/Admin
 router.get('/:id', getProduct);
+
+router.get('/new/form-data', getNewProductFormData);
 
 // @route   PUT /api/admin/products/:id
 // @desc    Məhsul yenilə
@@ -182,6 +196,34 @@ router.patch('/:id/stock', [
 router.patch('/:id/featured', toggleFeatured);
 
 // ===========================================
+// MIDDLEWARE: Invalid route handler
+// ===========================================
+
+// ✅ PROBLEMİN HƏLLI: "new" kimi spesifik route-ları handle et
+router.use('/:id', (req, res, next) => {
+  const { id } = req.params;
+  
+  // "new" route-u ayrıca handle et
+  if (id === 'new' && req.method === 'GET') {
+    return res.status(400).json({
+      success: false,
+      message: 'Yeni məhsul yaratmaq üçün POST metodu istifadə edin və ya /new/form-data endpoint-ini çağırın'
+    });
+  }
+  
+  // ObjectId validation
+  const mongoose = require('mongoose');
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Keçərsiz məhsul ID formatı'
+    });
+  }
+  
+  next();
+});
+
+// ===========================================
 // ROUTE INFO - Development üçün
 // ===========================================
 
@@ -193,6 +235,9 @@ if (process.env.NODE_ENV === 'development') {
       routes: {
         statistics: {
           'GET /api/admin/products/stats': 'Məhsul statistikaları və dashboard'
+        },
+        formData: {
+          'GET /api/admin/products/new/form-data': 'Yeni məhsul formu üçün kategoriya və vendor məlumatları'
         },
         bulk: {
           'POST /api/admin/products/bulk': 'Bulk əməliyyatlar (delete, updateStatus, toggleFeatured)'
@@ -214,6 +259,16 @@ if (process.env.NODE_ENV === 'development') {
         required: true,
         role: 'admin',
         header: 'Authorization: Bearer TOKEN_HERE'
+      },
+      newProductWorkflow: {
+        step1: 'GET /api/admin/products/new/form-data - Kategoriya və vendor məlumatları al',
+        step2: 'POST /api/admin/products - Yeni məhsul yarat',
+        step3: 'Frontend-də /admin/products/new route-unu açmaq üçün React Router istifadə et'
+      },
+      commonErrors: {
+        castError: 'ObjectId formatı keçərsizdir - 24 hex karakter tələb olunur',
+        newRoute: 'GET /products/new route-u məhsul API-si deyil, frontend route-udur',
+        validation: 'Required field-lər: name, description, sku, price/pricing.sellingPrice'
       },
       queryParameters: {
         getProducts: {
@@ -264,6 +319,34 @@ if (process.env.NODE_ENV === 'development') {
         }
       },
       examples: {
+        getFormData: {
+          request: 'GET /api/admin/products/new/form-data',
+          response: {
+            categories: [
+              {
+                _id: '64f8b5c8e1234567890abcde',
+                name: 'Elektronika',
+                icon: '📱',
+                color: '#3182ce'
+              }
+            ],
+            vendors: [
+              {
+                _id: '64f8b5c8e1234567890abcdf',
+                firstName: 'Vusal',
+                lastName: 'Əliyev',
+                businessName: 'TechStore AZ',
+                email: 'vusal@techstore.az'
+              }
+            ],
+            defaultData: {
+              status: 'draft',
+              featured: false,
+              pricing: { currency: 'AZN', taxable: true },
+              inventory: { trackQuantity: true, lowStockThreshold: 5 }
+            }
+          }
+        },
         createProduct: {
           name: 'iPhone 14 Pro',
           description: 'Apple iPhone 14 Pro 128GB Deep Purple',

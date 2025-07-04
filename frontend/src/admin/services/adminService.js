@@ -681,6 +681,36 @@ class AdminService {
     }
   }
 
+  async getNewProductFormData() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/products/new/form-data`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      return {
+        success: true,
+        categories: data.categories || [],
+        vendors: data.vendors || [],
+        defaultData: data.defaultData || {}
+      };
+    }
+    
+    return {
+      success: false,
+      error: data.message || 'Form məlumatları alınmadı'
+    };
+  } catch (error) {
+    console.error('Get new product form data error:', error);
+    return {
+      success: false,
+      error: 'Server ilə əlaqə xətası'
+    };
+  }
+}
+
   // ✅ DÜZƏLİŞ: Bulk operations əlavə et
   async bulkDeleteProducts(productIds) {
     return this.bulkOperation('delete', productIds);

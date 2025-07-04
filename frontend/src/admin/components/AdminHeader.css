@@ -1,0 +1,488 @@
+/* AdminHeader Styles */
+.admin-header {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.06);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  height: 80px;
+  padding: 0 48px;
+  display: flex;
+  align-items: center;
+}
+
+.admin-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  gap: 48px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+/* Sol hissə */
+.admin-header-left {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.sidebar-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 12px;
+  border-radius: 10px;
+  color: #2563eb;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}
+
+.sidebar-toggle:hover {
+  background: #f1f5ff;
+  color: #1d4ed8;
+}
+
+.admin-logo {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  text-decoration: none;
+  color: #1e293b;
+  font-weight: 800;
+  font-size: 22px;
+  transition: color 0.2s;
+}
+
+.admin-logo:hover {
+  color: #2563eb;
+}
+
+.logo-icon {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  padding: 12px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.10);
+  width: 48px;
+  height: 48px;
+}
+
+.logo-text {
+  font-size: 22px;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+/* Sağ hissə */
+.admin-header-right {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+/* Bildirişlər */
+.admin-notifications {
+  position: relative;
+}
+
+.notification-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 12px;
+  border-radius: 10px;
+  color: #64748b;
+  transition: all 0.2s;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.notification-btn:hover {
+  background: #f1f5ff;
+  color: #2563eb;
+}
+
+.notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: #ef4444;
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 12px;
+  min-width: 18px;
+  text-align: center;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(239,68,68,0.10);
+}
+
+.notification-dropdown {
+  position: absolute;
+  top: 110%;
+  right: 0;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(59,130,246,0.13);
+  width: 340px;
+  max-height: 420px;
+  overflow: hidden;
+  z-index: 1001;
+  margin-top: 8px;
+}
+
+.notification-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notification-header h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.mark-all-read {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 5px;
+  transition: background 0.2s;
+}
+
+.mark-all-read:hover {
+  background: #eff6ff;
+}
+
+.notification-list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.notification-item {
+  padding: 14px 24px;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.notification-item:hover {
+  background: #f8fafc;
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.notification-content p {
+  margin: 0 0 4px 0;
+  font-size: 15px;
+  color: #374151;
+  line-height: 1.4;
+}
+
+.notification-time {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.notification-item.order {
+  border-left: 3px solid #10b981;
+}
+
+.notification-item.warning {
+  border-left: 3px solid #f59e0b;
+}
+
+.notification-item.user {
+  border-left: 3px solid #3b82f6;
+}
+
+.notification-footer {
+  padding: 14px 24px;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+}
+
+.view-all {
+  color: #2563eb;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+
+.view-all:hover {
+  color: #1d4ed8;
+}
+
+/* Tez əməliyyatlar */
+.quick-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.quick-action {
+  background: none;
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  border-radius: 8px;
+  color: #64748b;
+  text-decoration: none;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.quick-action:hover {
+  background: #f1f5ff;
+  color: #2563eb;
+  border-color: #bcd0fa;
+}
+
+/* Ana səhifə linki */
+.public-site-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #64748b;
+  text-decoration: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.public-site-link:hover {
+  background: #f1f5ff;
+  color: #2563eb;
+}
+
+/* Admin profil */
+.admin-profile {
+  position: relative;
+}
+
+.profile-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.profile-btn:hover {
+  background: #f1f5ff;
+}
+
+.profile-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  font-weight: 800;
+  font-size: 22px;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.10);
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-initials {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.profile-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+
+.profile-role {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.profile-arrow {
+  color: #64748b;
+  transition: transform 0.2s;
+}
+
+.profile-arrow.open {
+  transform: rotate(180deg);
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: 110%;
+  right: 0;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(59,130,246,0.13);
+  width: 220px;
+  overflow: hidden;
+  z-index: 1001;
+  margin-top: 10px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  color: #374151;
+  text-decoration: none;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.dropdown-item:hover {
+  background: #f1f5ff;
+}
+
+.dropdown-item.logout {
+  color: #ef4444;
+}
+
+.dropdown-item.logout:hover {
+  background: #fef2f2;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 10px 0;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .admin-header-content {
+    gap: 24px;
+    padding: 0 16px;
+  }
+  .admin-header {
+    padding: 0 16px;
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-header-content {
+    gap: 12px;
+  }
+  .admin-header-left {
+    gap: 10px;
+  }
+  .admin-header-right {
+    gap: 10px;
+  }
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+  }
+  .profile-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 700px) {
+  .admin-header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 0 8px;
+  }
+  .admin-header-left, .admin-header-right {
+    gap: 8px;
+  }
+  .logo-text {
+    font-size: 16px;
+  }
+  .profile-info {
+    display: none;
+  }
+  .quick-actions {
+    display: none;
+  }
+  .public-site-link span {
+    display: none;
+  }
+  .notification-dropdown,
+  .profile-dropdown {
+    width: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-header-content {
+    padding: 0 4px;
+    gap: 4px;
+  }
+  .admin-header-left {
+    gap: 4px;
+  }
+  .admin-header-right {
+    gap: 4px;
+  }
+  .notification-dropdown,
+  .profile-dropdown {
+    width: 160px;
+    right: -30px;
+  }
+}
