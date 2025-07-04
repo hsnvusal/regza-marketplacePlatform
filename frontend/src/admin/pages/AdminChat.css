@@ -85,11 +85,6 @@
 .search-container {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: #f9fafb;
 }
 
 .search-container input {

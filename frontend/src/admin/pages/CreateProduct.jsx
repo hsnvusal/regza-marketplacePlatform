@@ -1,7 +1,8 @@
-// src/admin/pages/CreateProduct.jsx - Şəkil yükləmə funksiyası ilə
+// src/admin/pages/CreateProduct.jsx - Real image upload ilə
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import adminService from '../services/adminService';
+import ImageUpload from '../components/ImageUpload'; // Yeni komponent
 
 const CreateProduct = () => {
   const navigate = useNavigate();
@@ -9,7 +10,6 @@ const CreateProduct = () => {
   const [formLoading, setFormLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [imageUploading, setImageUploading] = useState(false);
   
   // Form data
   const [categories, setCategories] = useState([]);
@@ -35,7 +35,7 @@ const CreateProduct = () => {
       lowStockThreshold: 5,
       trackQuantity: true
     },
-    images: [],
+    images: [], // Bu artıq real URL-ləri saxlayacaq
     tags: [],
     seo: {
       metaTitle: '',
@@ -46,6 +46,15 @@ const CreateProduct = () => {
 
   useEffect(() => {
     loadFormData();
+    
+    // Cleanup function - component unmount olduqda preview URL-ləri təmizlə
+    return () => {
+      formData.images.forEach(img => {
+        if (img.preview) {
+          URL.revokeObjectURL(img.preview);
+        }
+      });
+    };
   }, []);
 
   const loadFormData = async () => {
@@ -101,92 +110,21 @@ const CreateProduct = () => {
     }
   };
 
-  // 🆕 Şəkil yükləmə funksiyaları
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-
-    setImageUploading(true);
-    setError('');
-
-    try {
-      const maxSize = 5 * 1024 * 1024; // 5MB
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-      
-      // Validate files
-      for (const file of files) {
-        if (file.size > maxSize) {
-          throw new Error(`Şəkil çox böyükdür: ${file.name}. Maksimum 5MB ola bilər.`);
-        }
-        if (!allowedTypes.includes(file.type)) {
-          throw new Error(`Dəstəklənməyən fayl formatı: ${file.name}. Yalnız JPEG, PNG, WebP qəbul edilir.`);
-        }
-      }
-
-      const uploadedImages = [];
-      
-      for (const file of files) {
-        // Create preview URL
-        const previewUrl = URL.createObjectURL(file);
-        
-        // Create image object
-        const imageObj = {
-          id: Date.now() + Math.random(),
-          file: file,
-          preview: previewUrl,
-          name: file.name,
-          size: file.size,
-          uploaded: false
-        };
-        
-        uploadedImages.push(imageObj);
-      }
-
-      // Add to form data
-      setFormData(prev => ({
-        ...prev,
-        images: [...prev.images, ...uploadedImages]
-      }));
-
-      console.log('✅ Images added:', uploadedImages.length);
-      
-    } catch (error) {
-      console.error('❌ Image upload error:', error);
-      setError(error.message);
-    } finally {
-      setImageUploading(false);
-    }
+  // 🆕 Şəkil dəyişikliyi handler-i
+  const handleImagesChange = (newImages) => {
+    setFormData(prev => ({
+      ...prev,
+      images: newImages
+    }));
+    console.log('📸 Images updated:', newImages.length);
   };
 
-  const removeImage = (imageId) => {
-    setFormData(prev => {
-      const updatedImages = prev.images.filter(img => img.id !== imageId);
-      
-      // Clean up preview URLs
-      const imageToRemove = prev.images.find(img => img.id === imageId);
-      if (imageToRemove && imageToRemove.preview) {
-        URL.revokeObjectURL(imageToRemove.preview);
-      }
-      
-      return {
-        ...prev,
-        images: updatedImages
-      };
-    });
-  };
-
-  const setMainImage = (imageId) => {
-    setFormData(prev => {
-      const updatedImages = prev.images.map(img => ({
-        ...img,
-        isMain: img.id === imageId
-      }));
-      
-      return {
-        ...prev,
-        images: updatedImages
-      };
-    });
+  // SKU avtomatik generasiya
+  const generateSKU = () => {
+    const timestamp = Date.now().toString().slice(-6);
+    const random = Math.random().toString(36).substring(2, 5).toUpperCase();
+    const brandPrefix = formData.brand ? formData.brand.substring(0, 3).toUpperCase() : 'PRD';
+    return `${brandPrefix}-${timestamp}-${random}`;
   };
 
   const validateForm = () => {
@@ -216,6 +154,12 @@ const CreateProduct = () => {
       errors.push('Stok miqdarı mənfi ola bilməz');
     }
 
+    // Şəkil yoxlaması - ən azı bir şəkil upload edilməli
+    const uploadedImages = formData.images.filter(img => img.uploaded);
+    if (uploadedImages.length === 0) {
+      errors.push('Ən azı bir şəkil yükləməlisiniz');
+    }
+
     return errors;
   };
 
@@ -232,6 +176,12 @@ const CreateProduct = () => {
         throw new Error(validationErrors.join(', '));
       }
 
+      // Hələ yüklənməmiş şəkillər var mı?
+      const pendingImages = formData.images.filter(img => !img.uploaded);
+      if (pendingImages.length > 0) {
+        throw new Error(`${pendingImages.length} şəkil hələ yüklənir. Zəhmət olmasa gözləyin.`);
+      }
+
       // Format product data
       const productData = {
         ...formData,
@@ -246,16 +196,18 @@ const CreateProduct = () => {
           stock: formData.inventory.stock ? parseInt(formData.inventory.stock) : 0,
           lowStockThreshold: parseInt(formData.inventory.lowStockThreshold) || 5
         },
-        // Convert images to format expected by backend
-        images: formData.images.map(img => ({
-          name: img.name,
-          size: img.size,
-          isMain: img.isMain || false,
-          // Note: In real implementation, you would upload files to server/cloud storage
-          // and get URLs back. For now, we'll use placeholder
-          url: img.preview || '',
-          file: img.file // This would be handled by your upload service
-        }))
+        // Real uploaded images
+        images: formData.images
+          .filter(img => img.uploaded && img.url) // Yalnız upload edilmiş şəkillər
+          .map((img, index) => ({
+            url: img.url,
+            publicId: img.publicId,
+            name: img.name,
+            size: img.size,
+            type: img.type,
+            isMain: img.isMain || index === 0, // İlk şəkil əsas olsun
+            order: index
+          }))
       };
 
       // Remove empty fields
@@ -386,16 +338,26 @@ const CreateProduct = () => {
 
             <div className="form-group">
               <label htmlFor="sku">SKU *</label>
-              <input
-                type="text"
-                id="sku"
-                name="sku"
-                value={formData.sku}
-                onChange={handleInputChange}
-                placeholder="Unikal məhsul kodu..."
-                required
-                className="form-input"
-              />
+              <div className="input-with-button">
+                <input
+                  type="text"
+                  id="sku"
+                  name="sku"
+                  value={formData.sku}
+                  onChange={handleInputChange}
+                  placeholder="Unikal məhsul kodu..."
+                  required
+                  className="form-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, sku: generateSKU() }))}
+                  className="generate-btn"
+                  title="Avtomatik SKU generasiya et"
+                >
+                  🎲
+                </button>
+              </div>
             </div>
 
             <div className="form-group">
@@ -502,74 +464,16 @@ const CreateProduct = () => {
           </div>
         </div>
 
-        {/* 🆕 Image Upload Section */}
+        {/* 🆕 Image Upload Section with new component */}
         <div className="form-section">
-          <h3 className="section-title">🖼️ Məhsul Şəkilləri</h3>
-          
-          <div className="image-upload-section">
-            <div className="upload-area">
-              <input
-                type="file"
-                id="images"
-                accept="image/jpeg,image/jpg,image/png,image/webp"
-                multiple
-                onChange={handleImageUpload}
-                className="file-input"
-                disabled={imageUploading}
-              />
-              <label htmlFor="images" className="upload-label">
-                <div className="upload-icon">📷</div>
-                <div className="upload-text">
-                  <h4>Şəkil yükləyin</h4>
-                  <p>Kliklə seçin və ya sürükləyin</p>
-                  <small>JPEG, PNG, WebP - Maksimum 5MB</small>
-                </div>
-                {imageUploading && <div className="upload-spinner"></div>}
-              </label>
-            </div>
-
-            {formData.images.length > 0 && (
-              <div className="images-preview">
-                <h4>Yüklənmiş Şəkillər ({formData.images.length})</h4>
-                <div className="images-grid">
-                  {formData.images.map(image => (
-                    <div key={image.id} className="image-item">
-                      <div className="image-preview">
-                        <img src={image.preview} alt={image.name} />
-                        <div className="image-overlay">
-                          <button
-                            type="button"
-                            onClick={() => setMainImage(image.id)}
-                            className={`btn-main ${image.isMain ? 'active' : ''}`}
-                            title="Əsas şəkil et"
-                          >
-                            ⭐
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeImage(image.id)}
-                            className="btn-remove"
-                            title="Şəkli sil"
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      </div>
-                      <div className="image-info">
-                        <span className="image-name">{image.name}</span>
-                        <span className="image-size">
-                          {(image.size / 1024 / 1024).toFixed(2)} MB
-                        </span>
-                        {image.isMain && (
-                          <span className="main-badge">Əsas</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <ImageUpload
+            images={formData.images}
+            onImagesChange={handleImagesChange}
+            maxImages={10}
+            maxSize={5 * 1024 * 1024} // 5MB
+            acceptedTypes={['image/jpeg', 'image/jpg', 'image/png', 'image/webp']}
+            adminService={adminService}
+          />
         </div>
 
         {/* Pricing Information */}
@@ -716,7 +620,7 @@ const CreateProduct = () => {
           <button
             type="submit"
             className={`btn btn-primary ${isLoading ? 'loading' : ''}`}
-            disabled={isLoading}
+            disabled={isLoading || formData.images.filter(img => img.uploaded).length === 0}
           >
             {isLoading ? (
               <>
@@ -732,6 +636,39 @@ const CreateProduct = () => {
           </button>
         </div>
       </form>
+
+      {/* Image Upload Status */}
+      {formData.images.length > 0 && (
+        <div className="upload-status">
+          <div className="status-header">
+            <h4>📊 Şəkil Statusu</h4>
+          </div>
+          <div className="status-content">
+            <div className="status-item">
+              <span className="status-label">Ümumi şəkil:</span>
+              <span className="status-value">{formData.images.length}</span>
+            </div>
+            <div className="status-item">
+              <span className="status-label">Yüklənmiş:</span>
+              <span className="status-value success">
+                {formData.images.filter(img => img.uploaded).length}
+              </span>
+            </div>
+            <div className="status-item">
+              <span className="status-label">Gözləyən:</span>
+              <span className="status-value warning">
+                {formData.images.filter(img => !img.uploaded).length}
+              </span>
+            </div>
+            <div className="status-item">
+              <span className="status-label">Əsas şəkil:</span>
+              <span className="status-value">
+                {formData.images.find(img => img.isMain)?.name || 'Seçilməyib'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Styling */}
       <style jsx>{`
@@ -951,6 +888,30 @@ const CreateProduct = () => {
           gap: 0.5rem;
         }
 
+        .input-with-button {
+          display: flex;
+          gap: 0.5rem;
+        }
+
+        .input-with-button .form-input {
+          flex: 1;
+        }
+
+        .generate-btn {
+          padding: 0.875rem;
+          background: #f7fafc;
+          border: 2px solid #e2e8f0;
+          border-radius: 10px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          font-size: 1.1rem;
+        }
+
+        .generate-btn:hover {
+          background: #edf2f7;
+          border-color: #cbd5e0;
+        }
+
         .form-actions {
           padding: 2rem;
           background: #f8fafc;
@@ -1032,6 +993,54 @@ const CreateProduct = () => {
           animation: spin 0.8s linear infinite;
         }
 
+        .upload-status {
+          background: white;
+          border-radius: 12px;
+          padding: 1.5rem;
+          margin-top: 1rem;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .status-header h4 {
+          margin: 0 0 1rem;
+          color: #2d3748;
+          font-size: 1.125rem;
+          font-weight: 600;
+        }
+
+        .status-content {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 1rem;
+        }
+
+        .status-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.75rem;
+          background: #f8fafc;
+          border-radius: 8px;
+        }
+
+        .status-label {
+          font-weight: 500;
+          color: #4a5568;
+        }
+
+        .status-value {
+          font-weight: 600;
+          color: #2d3748;
+        }
+
+        .status-value.success {
+          color: #22543d;
+        }
+
+        .status-value.warning {
+          color: #d69e2e;
+        }
+
         @media (max-width: 768px) {
           .create-product {
             padding: 0.75rem;
@@ -1073,6 +1082,20 @@ const CreateProduct = () => {
 
           .btn {
             justify-content: center;
+          }
+
+          .status-content {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 320px) {
+          .input-with-button {
+            flex-direction: column;
+          }
+
+          .generate-btn {
+            width: 100%;
           }
         }
       `}</style>

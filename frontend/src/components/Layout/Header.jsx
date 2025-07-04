@@ -63,7 +63,6 @@ const Header = () => {
   const navItems = [
     { href: '/products', label: 'Məhsullar', icon: '📦' },
     { href: '/categories', label: 'Kateqoriyalar', icon: '📂' },
-    { href: '/vendors', label: 'Satıcılar', icon: '🏪' },
     { href: '/support', label: 'Dəstək', icon: '🎧' }
   ];
 
@@ -73,7 +72,7 @@ const Header = () => {
         {/* Logo */}
         <Link to="/" className="logo">
           <div className="logo-icon">🛍️</div>
-          <div className="logo-text">MarketPlace Pro</div>
+          <div className="logo-text">RegzaStore</div>
         </Link>
 
         {/* Search Bar */}

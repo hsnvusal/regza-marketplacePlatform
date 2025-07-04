@@ -312,6 +312,178 @@ class AdminService {
     }
   }
 
+
+
+    // 🆕 Image upload function
+  async uploadImage(formData, onProgress = null) {
+    try {
+      console.log('📤 Uploading image...');
+
+      return await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        // Progress tracking
+        if (onProgress) {
+          xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+              const progress = Math.round((e.loaded / e.total) * 100);
+              onProgress(progress);
+            }
+          });
+        }
+
+        // Success handler
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const response = JSON.parse(xhr.responseText);
+              console.log('✅ Image uploaded successfully:', response);
+              resolve({
+                success: true,
+                data: {
+                  id: response.id || response._id,
+                  url: response.url || response.secure_url,
+                  publicId: response.public_id || response.publicId,
+                  ...response
+                }
+              });
+            } catch (parseError) {
+              console.error('❌ Upload response parse error:', parseError);
+              reject({
+                success: false,
+                error: 'Server cavabı parse edilə bilmədi'
+              });
+            }
+          } else {
+            try {
+              const errorResponse = JSON.parse(xhr.responseText);
+              console.error('❌ Upload failed:', errorResponse);
+              reject({
+                success: false,
+                error: errorResponse.message || errorResponse.error || `HTTP Error: ${xhr.status}`
+              });
+            } catch {
+              reject({
+                success: false,
+                error: `HTTP Error: ${xhr.status}`
+              });
+            }
+          }
+        });
+
+        // Error handler
+        xhr.addEventListener('error', () => {
+          console.error('❌ Upload network error');
+          reject({
+            success: false,
+            error: 'Şəbəkə xətası - şəkil yüklənə bilmədi'
+          });
+        });
+
+        // Timeout handler
+        xhr.addEventListener('timeout', () => {
+          console.error('❌ Upload timeout');
+          reject({
+            success: false,
+            error: 'Vaxt doldu - şəkil yükləmə çox uzun çəkdi'
+          });
+        });
+
+        // Set timeout (30 seconds)
+        xhr.timeout = 30000;
+
+        // Prepare request
+        xhr.open('POST', `${this.uploadURL}/image`);
+        
+        // Add auth header
+        const token = this.getAuthToken();
+        if (token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+
+        // Send request
+        xhr.send(formData);
+      });
+
+    } catch (error) {
+      console.error('❌ Upload service error:', error);
+      return {
+        success: false,
+        error: error.message || 'Şəkil yükləmə xətası'
+      };
+    }
+  }
+
+  // 🆕 Delete image function
+  async deleteImage(publicId) {
+    try {
+      console.log('🗑️ Deleting image:', publicId);
+      
+      return await this.makeRequest('/upload/image', {
+        method: 'DELETE',
+        body: JSON.stringify({ publicId })
+      });
+    } catch (error) {
+      console.error('❌ Delete image error:', error);
+      return {
+        success: false,
+        error: error.message || 'Şəkil silinmə xətası'
+      };
+    }
+  }
+
+  // 🆕 Bulk image upload
+  async uploadMultipleImages(files, onProgress = null) {
+    try {
+      const results = [];
+      const total = files.length;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('type', 'product');
+        formData.append('folder', 'products');
+
+        const result = await this.uploadImage(formData, (progress) => {
+          if (onProgress) {
+            const overallProgress = Math.round(((i * 100) + progress) / total);
+            onProgress(overallProgress, i + 1, total);
+          }
+        });
+
+        results.push({
+          file: file.name,
+          ...result
+        });
+
+        // Qısa fasilə ver
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      const successful = results.filter(r => r.success);
+      const failed = results.filter(r => !r.success);
+
+      return {
+        success: failed.length === 0,
+        results,
+        summary: {
+          total: total,
+          successful: successful.length,
+          failed: failed.length,
+          successRate: Math.round((successful.length / total) * 100)
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ Bulk upload error:', error);
+      return {
+        success: false,
+        error: error.message || 'Toplu yükləmə xətası'
+      };
+    }
+  }
+
   async updateUserStatus(userId, statusData) {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/status`, {

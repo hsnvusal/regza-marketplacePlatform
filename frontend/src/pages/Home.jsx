@@ -338,7 +338,7 @@ const Home = () => {
     return (
       <div className="loading-screen">
         <div className="loader"></div>
-        <div className="loading-text">MarketPlace Pro yüklənir...</div>
+        <div className="loading-text">RegzaStore yüklənir...</div>
         {Object.keys(apiErrors).length > 0 && (
           <div className="loading-errors">
             <small>Bəzi məlumatlar yüklənmədi, əsas funksionallıq işləyir</small>
@@ -364,10 +364,7 @@ const Home = () => {
                 <span>🛍️</span>
                 Alış-verişə başla
               </Link>
-              <Link to="/vendor/register" className="btn-hero btn-hero-secondary">
-                <span>🏪</span>
-                Satıcı ol
-              </Link>
+              
             </div>
           </div>
         </div>
