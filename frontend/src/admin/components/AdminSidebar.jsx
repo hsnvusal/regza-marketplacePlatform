@@ -61,6 +61,13 @@ const AdminSidebar = ({ isOpen }) => {
       ]
     },
     {
+      id: 'chat',
+      label: 'Chat Yönetimi',
+      icon: '💬',
+      path: '/admin/chat',
+      description: 'Müşteri destek konuşmaları'
+    },
+    {
       id: 'vendors',
       label: 'Satıcılar',
       icon: '🏪',

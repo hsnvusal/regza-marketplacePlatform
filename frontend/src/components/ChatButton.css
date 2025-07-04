@@ -1,0 +1,98 @@
+/* Chat Float Button */
+.chat-float-button {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  width: 60px;
+  height: 60px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 999;
+  overflow: hidden;
+}
+
+.chat-float-button:hover {
+  background: #2563eb;
+  transform: scale(1.05);
+  box-shadow: 0 6px 25px rgba(59, 130, 246, 0.4);
+  width: 120px;
+  border-radius: 30px;
+}
+
+.chat-button-text {
+  font-size: 14px;
+  font-weight: 500;
+  margin-left: 8px;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.chat-float-button:hover .chat-button-text {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .chat-float-button {
+    bottom: 20px;
+    right: 20px;
+    width: 55px;
+    height: 55px;
+  }
+  
+  .chat-float-button:hover {
+    width: 55px;
+    border-radius: 50%;
+  }
+  
+  .chat-button-text {
+    display: none;
+  }
+}
+
+/* Animation */
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  60% {
+    transform: translateY(-5px);
+  }
+}
+
+.chat-float-button:active {
+  transform: scale(0.95);
+}
+
+/* Notification dot (for future use) */
+.chat-float-button::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 12px;
+  height: 12px;
+  background: #ef4444;
+  border-radius: 50%;
+  border: 2px solid white;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.chat-float-button.has-notification::after {
+  opacity: 1;
+} 

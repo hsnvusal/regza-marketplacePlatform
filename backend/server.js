@@ -3,6 +3,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
 
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
@@ -23,10 +25,21 @@ const adminRoutes = require('./routes/admin'); // 🆕 ADMIN ROUTES
 const adminProductsRoutes = require('./routes/admin/adminProductsRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const adminVendorsRoutes = require('./routes/admin/adminVendorsRoutes');
-
-
+const chatRoutes = require('./routes/chat'); // 🆕 CHAT ROUTES
+const { handleChatEvents } = require('./socket/chatSocket'); // 🆕 SOCKET.IO CHAT
 
 const app = express();
+const httpServer = createServer(app); // 🆕 HTTP SERVER
+const io = new Server(httpServer, { // 🆕 SOCKET.IO SERVER
+  cors: {
+    origin: process.env.NODE_ENV === 'production' 
+      ? ['https://yourfrontenddomain.com'] 
+      : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:3001'],
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 
 // Trust proxy (Heroku, Vercel üçün)
@@ -143,7 +156,8 @@ app.get('/', (req, res) => {
       cart: '/api/cart',
       orders: '/api/orders',
       reviews: '/api/reviews',
-      payments: '/api/payments' // 🆕 PAYMENTS ENDPOINT
+      payments: '/api/payments', // 🆕 PAYMENTS ENDPOINT
+      chat: '/api/chat' // 🆕 CHAT ENDPOINT
     }
   });
 });
@@ -160,6 +174,7 @@ app.use('/api/categories', categoryRoutes); // ƏLAVƏ EDİN
 app.use('/api/admin/products', adminProductsRoutes);
 app.use('/api/admin/categories', require('./routes/admin/adminCategoriesRoutes'));
 app.use('/api/admin/vendors', adminVendorsRoutes);
+app.use('/api/chat', chatRoutes); // 🆕 CHAT ROUTES
 
 
 
@@ -687,14 +702,31 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+// Socket.IO chat events'i initialize et
+handleChatEvents(io);
+
+// Socket.IO status endpoint
+app.get('/api/socket/status', (req, res) => {
+  const connectedSockets = io.engine.clientsCount;
+  res.json({
+    success: true,
+    socketIO: {
+      enabled: true,
+      connectedClients: connectedSockets,
+      version: require('socket.io/package.json').version
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Server başlatılması
 const startServer = async () => {
   try {
     // Database bağlantısı
     await connectDB();
     
-    // Server başlat
-    const server = app.listen(PORT, () => {
+    // Socket.IO ve HTTP server başlat
+    const server = httpServer.listen(PORT, () => {
       console.log('\n🚀================================🚀');
       console.log(`📡 Server ${PORT} portunda işləyir`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);

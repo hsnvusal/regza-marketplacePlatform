@@ -17,7 +17,16 @@ const apiClient = axios.create({
 // Request interceptor
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('marketplace_token');
+    let token = null;
+    
+    // Admin paneli için admin token kullan
+    if (config.url.includes('/admin/') || config.url.includes('/chat/admin/')) {
+      token = localStorage.getItem('adminToken');
+    } else {
+      // Normal kullanıcı işlemleri için user token kullan
+      token = localStorage.getItem('marketplace_token');
+    }
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -58,8 +67,14 @@ apiClient.interceptors.response.use(
           // Unauthorized - clear auth and redirect
           localStorage.removeItem('marketplace_token');
           localStorage.removeItem('marketplace_user');
-          if (window.location.pathname !== '/login') {
-            // Only redirect, don't show toast here
+          localStorage.removeItem('adminToken');
+          
+          if (window.location.pathname.startsWith('/admin')) {
+            // Admin panel - redirect to admin login
+            console.log('🔄 Admin session expired, redirecting to admin login');
+            window.location.href = '/admin/login';
+          } else if (window.location.pathname !== '/login') {
+            // Regular user - redirect to user login
             console.log('🔄 Session expired, redirecting to login');
             window.location.href = '/login';
           }

@@ -434,8 +434,7 @@ admin-products {
         }
 
         .product-image {
-          width: 56px;
-          height: 56px;
+     
           border-radius: 10px;
           overflow: hidden;
           flex-shrink: 0;
