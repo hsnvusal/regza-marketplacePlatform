@@ -293,11 +293,15 @@ const userSchema = new mongoose.Schema({
 
 // Virtual fields
 userSchema.virtual('fullName').get(function() {
-  return `${this.firstName} ${this.lastName}`;
+  const firstName = this.firstName || '';
+  const lastName = this.lastName || '';
+  return `${firstName} ${lastName}`.trim();
 });
 
 userSchema.virtual('initials').get(function() {
-  return `${this.firstName.charAt(0)}${this.lastName.charAt(0)}`.toUpperCase();
+  const firstInitial = this.firstName ? this.firstName.charAt(0) : '';
+  const lastInitial = this.lastName ? this.lastName.charAt(0) : '';
+  return `${firstInitial}${lastInitial}`.toUpperCase();
 });
 
 userSchema.virtual('isLocked').get(function() {
